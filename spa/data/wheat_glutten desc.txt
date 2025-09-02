@@ -1,0 +1,4 @@
+拉曼无损快速检测小麦面筋含量
+共四组数据：麦粒/麦粉 VIS/NIRS
+
+This dataset is provided by NUFE.

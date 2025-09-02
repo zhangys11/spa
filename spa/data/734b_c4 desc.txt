@@ -1,0 +1,9 @@
+Raman spectra of four Milk Tablet Candy products (with different additives), 
+from a dairy company in Heilongjiang Province, China. 
+
+Class labels:  
+["AD钙奶片","乳酸奶片","牛初乳奶片","营养奶片"] 
+Each class has 15 samples.
+
+  X meaning: Raman shift / wavenumber (cm-1). 
+  X Range: 250~2339

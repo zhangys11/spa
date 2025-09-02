@@ -1,0 +1,13 @@
+Column Meanings: Raman shift / wavenumber (cm-1). Range: 250~2339
+Each row is one sample. 
+Total 15 samples.
+
+* Data Source: Compressed Milk Tablet Candy, with Calcium and Vitamin A,D additives
+* Source: Heilongjiang Province, China.
+-------------------------
+Internal Source ID 734b
+Edit date: Jan 13, 2020
+
+--------------------
+If you use this data set, please add the reference: 
+[1] Secured telemetry based on time-variant sensing matrix – An empirical study of spectroscopic profiling, Smart Agricultural Technology, Volume 5, 2023, doi: 10.1016/j.atech.2023.100268

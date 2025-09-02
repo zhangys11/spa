@@ -1,0 +1,19 @@
+Raman spectra of table salt 食盐拉曼光谱
+
+C1 - "shenjinkuangyan(zhongyan)：深井矿盐（中盐集团）加碘盐", 
+“deep well mineral salt” from CNSIC (China National Salt Industry Co.,Ltd).
+
+C2 - "aozhoutianranhaiyan(huaiyan)：澳洲天然海盐（淮盐）未加碘",
+“Australian natural sea salt” from Suyan Group.
+
+Instrument: Thermo Fisher DXR2xi
+DXR2xi显微拉曼成像光谱仪（美国Thermo Fisher公司），
+配备有532 nm激光器。
+仪器参数设置：
+激光功率为10 mw，曝光时间1 s，扫描次数500，
+拉曼位移范围为100～3000 cm-1。
+
+--------------------
+If you use this data set, please add the reference: 
+[1] Classifiability analysis of spectroscopic profiling datasets in food safety related discriminative tasks [J]. Journal of Food Protection, 2024
+[2] Analytical chemistry kernel library for spectroscopic profiling data, Food Chemistry Advances, Volume 3, 2023, 100342, ISSN 2772-753X, https://doi.org/10.1016/j.focha.2023.100342
