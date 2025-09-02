@@ -2,11 +2,8 @@ build/
 dist/
 *.egg-info/
 *.pyc
-notebook/小鼠肾脏代谢组学.xlsx
-notebook/ctgan.csv
-notebook/kde.csv
-notebook/smote.csv
-notebook/vae.csv
+notebook/
+!notebook/*.ipynb
 spa/gui/*.csv
 spa-tk-*
 /dist
