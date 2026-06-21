@@ -30,7 +30,7 @@ class PSO(object):
             dim=6, num_particle=1000, max_iter=50, p_low=low, p_up=up, 
             v_low=-1, v_high=1, w = 0.9, c1 = 2., c2 = 2.)
 
-    pso.interate(draw = 1)  # 迭代开始， draw = 1表示绘图
+    pso.iterate(draw = 1)  # 迭代开始， draw = 1表示绘图
     '''
 
     def __init__(self, dim, fitness, num_particle, max_iter, p_low, p_up, v_low, v_high, w = 1., c1 = 2., c2 = 2.):
@@ -68,7 +68,7 @@ class PSO(object):
                 self.g_best = self.p_best[i]
                 self.g_bestFit = fit
     
-    def interate(self, draw = 1):  
+    def iterate(self, draw = 1):  
         '''
         The main loop of PSO
         '''

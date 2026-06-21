@@ -1,2 +1,5 @@
 import importlib.metadata
-__version__ = importlib.metadata.version('spa-tk')
+try:
+    __version__ = importlib.metadata.version('spa-ds')
+except importlib.metadata.PackageNotFoundError:
+    __version__ = '2.0.1'

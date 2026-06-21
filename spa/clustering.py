@@ -43,7 +43,8 @@ def run_clustering(X, K = None, y = None, X_names = None, show = True):
             for i in range(len(model.means_)):
                 plt.plot(X_names, model.means_[i], label = 'cluster center ' + str(i+1)) # model.covariances_
         elif 'affinity_matrix_' in model.__dict__:
-            plt.matshow(model.affinity_matrix_, label='affinity matrix')
+            plt.matshow(model.affinity_matrix_)
+            plt.title('affinity matrix')
         elif isinstance(model, AgglomerativeClustering):
             # HC
             plt.figure(figsize = (10, 10))

@@ -1,10 +1,10 @@
 # spa-tk (originally qsi-tk)
 
- Data science toolkit (TK) for spectroscopic profiling signals/data.
+ Data science toolkit for spectroscopic profiling signals/data.
 
 # Installation
 
-> pip install spa-tk
+> pip install spa-ds
 
 # Contents
 

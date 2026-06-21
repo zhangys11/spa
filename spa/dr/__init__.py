@@ -32,14 +32,14 @@ def dct(x, K = None, flavor = 'fftpack', display = True):
     -------
     For `scipy.fftpack.dct(x, type=2, n=None, axis=-1, norm=None, overwrite_x=False)`, 
     $$
-    y[k] = 2 \sum_{i=0}^{M-1} x[i] cos({{(2i+1)\pi k} \over {2M} }), 0 <= k < M
+    y[k] = 2 \\sum_{i=0}^{M-1} x[i] cos({{(2i+1)\\pi k} \\over {2M} }), 0 <= k < M
     $$
     If norm='ortho', y[k] is multiplied by a scaling factor f:
     $$
-    f = \sqrt{1/(4M)}
+    f = \\sqrt{1/(4M)}
     $$, if k = 0,
     $$
-    f = \sqrt{1/(2M)}
+    f = \\sqrt{1/(2M)}
     $$,  otherwise.
     
     '''

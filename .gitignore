@@ -5,6 +5,6 @@ dist/
 notebook/
 !notebook/*.ipynb
 spa/gui/*.csv
-spa-tk-*
+spa-ds-*
 /dist
 **/.ipynb_checkpoints

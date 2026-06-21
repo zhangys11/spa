@@ -97,6 +97,7 @@ class GaussianWeightedKNNRegressor(BaseEstimator, RegressorMixin):
     def score(self, X, y):
         return r2_score(y, self.predict(X))
     
+    @staticmethod
     def gridsearch_hparam(X_train, y_train, X_val = None, y_val = None, ks = [3, 4, 5, 10, 20], sigmas=[.1, 1, 10,100,1000]):
         
         best_r2 = -np.inf
@@ -200,7 +201,6 @@ def run_regressors(X_train, X_val, X_test, y_train, y_val, y_test,
             best_hparam = hparams[np.argmax(val_scores)]
             lasso = Lasso(alpha = best_hparam).fit(X_train, y_train)
 
-            lasso = Lasso(alpha = 0.1).fit(X_train, y_train)
             yp = lasso.predict(X_test)
             y_pred_train = lasso.predict(X_train)
 

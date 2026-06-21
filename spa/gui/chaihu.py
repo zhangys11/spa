@@ -94,6 +94,8 @@ def open_browser():
 
 if __name__ == '__main__':
     # use netstat -ano|findstr 5005 to check port use
-    # Timer(3, open_browser).start()
-    # app.run(host="0.0.0.0", port=5005, debug=False)
-    FlaskUI(app=app, server="flask", port=5005).run()
+    try:
+        FlaskUI(app=app, server="flask", port=5005).run()
+    except Exception:
+        Timer(3, open_browser).start()
+        app.run(host="127.0.0.1", port=5005, debug=False)

@@ -258,7 +258,6 @@ def aenet_cv_fs(X, y, X_names=None, N=30, display=True, verbose=True):
     aen = AdaptiveElasticNetCV().fit(X, y)
     if verbose:
         print('R2 =', round(aen.score(X, y), 3))
-        # print(aen.__dict__)
 
     NZ = np.count_nonzero(aen.coef_)
 
@@ -572,14 +571,14 @@ def nch_time_series_fs(X, fft_percentage=0.05, dct_percentage=0.1,
     FS1 = []
     FS2 = []
     FS3 = []
-    FS4 = [[]]*len(conv_masks)
+    FS4 = [[] for _ in range(len(conv_masks))]
 
     for x in X:
 
         fs1 = []
         fs2 = []
         fs3 = []
-        fs4s = [[]]*len(conv_masks)
+        fs4s = [[] for _ in range(len(conv_masks))]
         LV.append(x.flatten().tolist())
 
         for xx in x:

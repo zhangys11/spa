@@ -22,8 +22,8 @@ def plot_components_1d(X, y, labels = None, use_markers = False, ax = None, lege
 
     if (y is None or len(y) == 0):
         labels = [0] # only one class
-    if (labels is None):
-        labels = set(y)
+    if (labels is None or len(labels) == 0):
+        labels = sorted(set(y))
         
     i=0
     for label in labels:
@@ -70,8 +70,8 @@ def plot_components_2d(X, y, labels = None, use_markers = False, ax=None, legend
         
     if (y is None or len(y) == 0):
         labels = [0] # only one class
-    if (labels is None):
-        labels = set(y)
+    if (labels is None or len(labels) == 0):
+        labels = sorted(set(y))
 
     i=0
 

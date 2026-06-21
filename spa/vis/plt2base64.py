@@ -12,4 +12,4 @@ def plt2html(plt):
     '''
     output an HTML img tag
     '''
-    return '<img src="data:image/.png;base64,' + plt2base64(plt) + '">'
+    return '<img src="data:image/png;base64,' + plt2base64(plt) + '">'

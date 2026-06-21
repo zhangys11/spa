@@ -4,7 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import IPython.display
 
-from sklearn.linear_model import LogisticRegressionCV
+from sklearn.linear_model import LogisticRegressionCV, LassoCV
+from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler,MinMaxScaler
 from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
@@ -187,7 +188,7 @@ def analyze_dataset(X, y, X_names, fs_output = '', fs_feature_num = 30, cla_feat
     supervised_dimension_reductions(X_mm_scaled, y)
     print('LDA is like PCA, but focuses on maximizing the seperatibility between categories. \
 LDA for two categories tries to maximize distance between group means, meanwhile minimize intra-group variances. \n\
-{ (\mu_1 - \mu_2)^2 } \over { s_1^2 + s_2^2 }')
+{ (\\mu_1 - \\mu_2)^2 } \\over { s_1^2 + s_2^2 }')
     print('The model fits a Gaussian density to each class, assuming that all classes share the same covariance matrix.\nThe fitted model can be used to reduce the dimensionality of the input by projecting it to the most discriminative directions.')
     print('Risk of using LDA: Possible Warning - Variables are collinear. \n\
 LDA, like regression techniques involves computing a matrix inversion, which is inaccurate if the determinant is close to 0 (i.e. two or more variables are almost a linear combination of each other). \n\
@@ -301,7 +302,7 @@ def build_simple_pipeline(X, y, save_path = None):
         d['X'] = X
         d['y'] = y
         d['Xfe'] = Xfe
-        joblib.dump(dict, save_path)
+        joblib.dump(d, save_path)
 
         ##### To load back ##########
         # dict_r = joblib.load('your.pkl')

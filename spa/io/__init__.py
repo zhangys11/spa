@@ -15,7 +15,14 @@ from ..vis.plt2base64 import plt2html
 DATA_FOLDER = os.path.dirname(os.path.dirname(
     os.path.realpath(__file__))) + "/data/"
 
-matplotlib.rcParams['font.family']="DengXian" # FangSong, Kaiti. STKaiti(may not work). support Unicode chars
+matplotlib.rcParams['font.sans-serif'] = [
+    'Arial Unicode MS',       # macOS
+    'Heiti SC', 'PingFang SC', # macOS Chinese
+    'Microsoft YaHei', 'SimHei', 'DengXian', # Windows Chinese
+    'WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Noto Sans SC', # Linux Chinese
+    'DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif',
+]
+matplotlib.rcParams['font.family'] = 'sans-serif'
 matplotlib.rcParams['axes.unicode_minus']=False # in case minus sign is shown as box
 
 # path, delimiter, has_y, path_desc, labels, default_shift
@@ -24,7 +31,7 @@ DATASET_MAP = {'s4_formula': ('7341_C1.csv', ',', False, '7341_C1 desc.txt', ['S
                's4_formula_c2': ('7341_C2.csv', ',', True, '7341_C2 desc.txt', ['Brand 1', 'Brand 2'], 1000),
                's4_formula_c3': ('7341.csv', ',', True, '7341 desc.txt', ['Brand 1', 'Brand 2', 'Brand 3'], 1000),
                'milk_tablet_candy': ('734b.csv', ',', False, '734b desc.txt', ['Compressed Milk Tablet Candy'], 200),
-               'milk_tablet_candy_c4': ('734b_c4.csv', ',', False, '734b_c4 desc.txt', ["AD钙奶片","乳酸奶片","牛初乳奶片","营养奶片"], 200),
+                'milk_tablet_candy_c4': ('734b_c4.csv', ',', True, '734b_c4 desc.txt', ["AD钙奶片","乳酸奶片","牛初乳奶片","营养奶片"], 200),
                'yogurt_brand': ('7346.csv', ',', True, '7346 desc.txt', ["YL", "GM", "WQ", "MN"], 200),
                'goat_milk_formula': ('7635.csv', ',', False, '7635 desc.txt', ['Goat Milk Formula '], 200),
                'vintage': ('7344.txt', '\t', False, '7344 desc.txt', ['8-year vintage'], 200),
@@ -131,6 +138,17 @@ def load_dataset(id, SD=1, shift=None, x_range=None, y_subset=None, display=True
     return X, y, X_names, desc, labels
 
 
+def _safe_float_convert(columns):
+    """Convert column names to floats, skipping non-numeric entries."""
+    result = []
+    for c in columns:
+        try:
+            result.append(float(c))
+        except (ValueError, TypeError):
+            continue
+    return result
+
+
 def open_dataset(path, delimiter=',', has_y=True, labels=None, x_range=None, y_subset=None):
     '''
     Parameters
@@ -161,13 +179,20 @@ def open_dataset(path, delimiter=',', has_y=True, labels=None, x_range=None, y_s
         y = np.array(range(len(labels)))
         X = df.iloc[:,1:].values.T        
 
-    if 'wheat_glutten.xls' in path:
+    elif 'wheat_glutten.xls' in path:
 
+        import xlrd
         file_path, sheetX, sheetY = path.split(",")
-        X = pd.read_excel(file_path, sheet_name=int(sheetX))
-        X_names = list(X.columns)
-        X = X.values
-        y = pd.read_excel(file_path, sheet_name=int(sheetY)).iloc[:,-1].values
+        wb = xlrd.open_workbook(file_path, formatting_info=False)
+        sheet_X = wb.sheet_by_index(int(sheetX))
+        X_names_data = [sheet_X.row_values(0)]  # first row as column names
+        data_rows = [sheet_X.row_values(r) for r in range(1, sheet_X.nrows)]
+        X = pd.DataFrame(data_rows, columns=X_names_data[0]).values
+        X_names = list(X_names_data[0])
+
+        sheet_Y = wb.sheet_by_index(int(sheetY))
+        y_data = [sheet_Y.row_values(r) for r in range(1, sheet_Y.nrows)]
+        y = pd.DataFrame(y_data).iloc[:,-1].values
     
     elif ext == '.pkl':
 
@@ -194,11 +219,9 @@ def open_dataset(path, delimiter=',', has_y=True, labels=None, x_range=None, y_s
 
         cols = data.shape[1]
 
-        # judge whether there is a Tag column
-        if 'Tag' in data.columns.values:
-            has_tag = 1
-        else:
-            has_tag = 0
+        # judge whether there is a Tag column (case-insensitive, strip whitespace)
+        col_names = [str(c).strip().lower() for c in data.columns.values]
+        has_tag = 1 if 'tag' in col_names else 0
 
         if has_y:
 
@@ -268,7 +291,7 @@ def scatter_plot(X, y, labels=None, tags=None, output_html=False, figsize = (12,
     plt.subplot(1, 2, 1)
     pca = PCA(n_components=2)  # keep the first 2 components
     X_pca = pca.fit_transform(X)
-    plot_components_2d(X_pca, y, legends=labels, tags=tags, ax = plt.gca())
+    plot_components_2d(X_pca, y, legends=labels if len(labels) > 0 else None, tags=tags, ax = plt.gca())
     plt.xlabel('PC1 (' + str(round(pca.explained_variance_ratio_[0], 2)) + ')')
     plt.ylabel('PC2 (' + str(round(pca.explained_variance_ratio_[1], 2)) + ')')
     plt.title('PCA')
@@ -321,7 +344,7 @@ def draw_average(X, X_names, SD=1, output_html=False, figsize = (20,5)):
 
     if SD > 0:
         plt.plot(X_names, X.mean(axis=0), "k", linewidth=1, label='averaged waveform $± ' +
-                 str(SD) + '\sigma$ (' + str(len(X)) + ' samples)')
+                 str(SD) + '\\sigma$ (' + str(len(X)) + ' samples)')
         plt.errorbar(X_names, X.mean(axis=0), X.std(axis=0)*SD,
                      color="dodgerblue", linewidth=3,
                      alpha=0.6)  # X.std(axis = 0)

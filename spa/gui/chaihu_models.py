@@ -71,19 +71,29 @@ def train_models():
     return s, lda, model_ssa,model_ssc,model_ssd, model_classifier
 
 
+def _ensure_models():
+    """Lazy initialization of trained models."""
+    global s, lda, model_ssa, model_ssc, model_ssd, model_classifier
+    if 's' not in globals() or s is None:
+        s, lda, model_ssa, model_ssc, model_ssd, model_classifier = train_models()
+
 def predict_SSa(X):
+    _ensure_models()
     pre_ssa=model_ssa.predict(X)
     return pre_ssa
 
 def predict_SSc(X):
+    _ensure_models()
     pre_ssc = model_ssc.predict(X)
     return pre_ssc
 
 def predict_SSd(X):
+    _ensure_models()
     pre_ssd = model_ssd.predict(X)
     return pre_ssd
 
 def predict_class(X):
+    _ensure_models()
     pre_class=model_classifier.predict_proba(X)
     a=pre_class.argmax()
     place_list=['Gansu','Inner Mongolia(wild)','Inner Mongolia(cultivated)','Inner Mongolia(black)','Shaanxi']
@@ -142,6 +152,7 @@ def load_file(pathname):
     '''
     Load data from a csv file
     '''
+    _ensure_models()
     X = pd.read_excel(pathname)
     if len(X)!=1:
         print('The model only supports single sample analysis.')
@@ -172,5 +183,5 @@ def analyze_probs(fn):
     pro=[f,d,e]
     return pro
 
-# if __name__ == '__main__':
-s, lda, model_ssa,model_ssc,model_ssd, model_classifier=train_models()
+if __name__ == '__main__':
+    s, lda, model_ssa, model_ssc, model_ssd, model_classifier = train_models()
