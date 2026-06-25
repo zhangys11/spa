@@ -6,10 +6,33 @@ from sklearn.model_selection import train_test_split
 import IPython.display
 from tqdm import tqdm
 import seaborn as sns
-from statsmodels.graphics.boxplots import beanplot
 from ._group_lasso import LogisticGroupLasso
 from ..metrics import ic
 from ...io.pre import stratified_kennardstone_split
+
+
+def _beanplot(ax, groups, labels):
+    '''
+    Minimal bean plot using matplotlib only (replaces statsmodels' beanplot).
+
+    A bean plot = a violin (kernel density) per group, overlaid with every
+    individual observation drawn as a short horizontal dash (the "beans") and
+    the group mean as a thicker line.
+    '''
+    groups = [np.asarray(g, dtype=float).ravel() for g in groups]
+    positions = np.arange(1, len(groups) + 1)
+    parts = ax.violinplot(groups, positions=positions, widths=0.8,
+                          showmeans=False, showextrema=False)
+    for body in parts['bodies']:
+        body.set_facecolor('cyan')
+        body.set_alpha(0.4)
+        body.set_edgecolor('black')
+    for pos, data in zip(positions, groups):
+        ax.hlines(data, pos - 0.25, pos + 0.25, color='black', lw=0.8, alpha=0.7)
+        ax.hlines(np.mean(data), pos - 0.35, pos + 0.35, color='red', lw=2)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(labels)
+
 
 def window_op(x_names, region, resolution = 2, window = 'rbf', sd = 1, display = False):
     '''
@@ -326,7 +349,7 @@ def group_lasso(X, y, groups = None, group_reg = 100, l1_reg = 100,
 
     if (verbose):
         
-        print(f"Group Lasso Parameters (group_reg, l1_reg, split): {group_reg, l1_reg, split}")
+        print(f"Group Lasso Parameters (group_reg, l1_reg, split_method): {group_reg, l1_reg, split_method}")
         print(f"Number of selected features: {gl.sparsity_mask_.sum()}")
         print(f"Test accuracy: {acc}")
         print(group_reg,l1_reg)
@@ -604,19 +627,7 @@ def interpret_group_result(feature_importances, fss, mask, group_info,
                 ax.set_xlabel("Class")
                 
             elif plot_type == "bean":
-                data = []
-                for i, class_data in enumerate(result_class):
-                    data.extend([(value, labels[i]) for value in class_data])
-
-                df_bean = pd.DataFrame(data, columns=["Value", "Class"])
-                df_pivot = df_bean.pivot(columns="Class", values="Value")
-
-                df_pivot = df_pivot.fillna(0)
-                beanplot(df_pivot.T.values, ax=ax, labels=df_pivot.columns, plot_opts={
-                    'violin_width': 0.8,
-                    'bean_color': 'cyan',
-                    'line_color': 'black'
-                })
+                _beanplot(ax, result_class, labels)
             ax.set_title(title[j])
             ax.set_ylabel('Value')
 

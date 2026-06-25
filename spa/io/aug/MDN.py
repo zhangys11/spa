@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import random
+from ...device import resolve_device
 
 class MDN(nn.Module):
     def __init__(self, n_hidden, n_gaussians):
@@ -29,9 +30,6 @@ class MDN(nn.Module):
         sigma = torch.exp(self.z_sigma(z_h))
         return pi, mu, sigma
 
-model = MDN(n_hidden=80, n_gaussians=5)
-optimizer = torch.optim.Adam(model.parameters())
-
 def mdn_loss_fn(y, mu, sigma, pi):
     m = torch.distributions.Normal(loc=mu, scale=sigma)
     loss = torch.exp(m.log_prob(y))
@@ -45,15 +43,16 @@ def add_one(x):
     else:
         return x
 
-def expand_dataset(X, y, nobs, n_gaussians=5, epochs=1000, n_hidden=10, verbose = True):
+def expand_dataset(X, y, nobs, n_gaussians=5, epochs=1000, n_hidden=10, cuda=None, verbose = True):
 
+    device = resolve_device(cuda)   # CUDA -> MPS -> CPU
     final_data = pd.DataFrame()
     plot_once = True
 
     for label in set(y):
         data = pd.concat([pd.DataFrame(X), pd.DataFrame(y, columns=['label'])], axis=1)
         data = data[data['label'] == label]
-        data = data.applymap(add_one)
+        data = data.map(add_one)   # DataFrame.map (applymap was removed in pandas 2.x)
         scaler = StandardScaler()
         normalized_data = scaler.fit_transform(data.iloc[:, :-1])
         shift = (data.columns)[:-1]
@@ -67,19 +66,17 @@ def expand_dataset(X, y, nobs, n_gaussians=5, epochs=1000, n_hidden=10, verbose 
         for i in range(data.shape[0]):
             input_y.append(list(data.iloc[i, :-1]))
 
-        x_data_ = torch.tensor(input_x)
-        x_data = x_data_.reshape(-1, 1)
-        y_data_ = torch.tensor(input_y)
-        y_data = y_data_.reshape(-1, 1)
+        x_data = torch.tensor(input_x).reshape(-1, 1).to(device)
+        y_data = torch.tensor(input_y).reshape(-1, 1).to(device)
 
-        model = MDN(n_hidden=n_hidden, n_gaussians=n_gaussians)
+        model = MDN(n_hidden=n_hidden, n_gaussians=n_gaussians).to(device)
 
         if verbose and plot_once: # show model structure
             
             from torchviz import make_dot
             import IPython.display
             
-            input_vec = torch.zeros(n_hidden, 1, dtype=torch.float, requires_grad=False) #.to('cuda')
+            input_vec = torch.zeros(n_hidden, 1, dtype=torch.float, requires_grad=False).to(device)
             IPython.display.display(make_dot(model(input_vec)))
 
             plot_once = False
@@ -95,7 +92,10 @@ def expand_dataset(X, y, nobs, n_gaussians=5, epochs=1000, n_hidden=10, verbose 
             if verbose and epoch % 100 == 0:
                 print('loss of epoch', epoch, ':', loss.data.tolist())
 
-        pi, mu, sigma = model(x_data[:(data.shape[1]-1)])
+        with torch.no_grad():
+            pi, mu, sigma = model(x_data[:(data.shape[1]-1)])
+        # move parameters back to CPU for the numpy-based sampling below
+        pi, mu, sigma = pi.cpu(), mu.cpu(), sigma.cpu()
         k = torch.multinomial(pi, 1).view(-1)
         sam = []
         for i in range(nobs):

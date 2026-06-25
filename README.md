@@ -1,4 +1,4 @@
-# spa-tk (originally qsi-tk)
+# spa-ds (originally qsi-tk)
 
  Data science toolkit for spectroscopic profiling signals/data.
 

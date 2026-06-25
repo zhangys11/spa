@@ -3,7 +3,7 @@ import ackl.metrics
 assert( '__version__' in ackl.__dict__ and ackl.__version__ >= '1.1.0')
 
 import numpy as np
-from IPython.core.display import HTML, display
+from IPython.display import HTML, display
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
 

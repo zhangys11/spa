@@ -6,7 +6,7 @@ setup(
     name="spa-ds",
 
     # Version number:
-    version="2.0.1",
+    version="2.0.2",
 
     # Application author details:
     author="Yinsheng Zhang (Ph.D.)",
@@ -65,6 +65,6 @@ setup(
 
 # To Build and Publish (for developer only),
 # Run: python -m build --wheel
-# Run: python -m pyc_wheel spa_tk.whl  [optional]
+# Run: python -m pyc_wheel spa_ds.whl  [optional]
 # or
 # Run: python setup.py sdist bdist_wheel; twine upload dist/*

@@ -2,29 +2,39 @@ from sklearn.mixture import GaussianMixture
 import numpy as np
 import pandas as pd
 
-def expand_dataset(X, y, nobs, verbose = True):
+def expand_dataset(X, y, nobs, n_components=10, verbose = True):
     '''
     Generate equal number of samples for each class.
 
     nobs : samples to generate per class.
+    n_components : number of Gaussian components (paper Table 2: k=10).
+
+    Notes
+    -----
+    * The GMM is now fitted on the samples of EACH class separately (the previous
+      version fitted on the whole ``X`` every iteration, ignoring the label).
+    * ``covariance_type='diag'`` matches the paper's naive/diagonal-covariance
+      assumption and stays numerically stable for high-dimensional spectra,
+      where a full covariance (n_features >> n_samples) would be singular.
     '''
 
-    # X = pd.DataFrame(X)
+    X = np.asarray(X, dtype=float)
+    yv = np.asarray(y)
 
-    final_data=pd.DataFrame()
-    for label in set(y):
-        # for i in range(X.shape[1]):
-        gmm = GaussianMixture(n_components= max(len(set(y)), 3))  # 设定混合成分数
-        gmm.fit(X)  # 对数据进行拟合
+    final_data = pd.DataFrame()
+    for label in np.unique(yv):
+        X_label = X[yv == label]
+        k = max(1, min(n_components, len(X_label)))     # cannot exceed #samples
+        gmm = GaussianMixture(n_components=k, covariance_type='diag')
+        gmm.fit(X_label)
         if verbose:
-            print('GMM weights for label', label, ":", 
-                    # str(np.round(gmm.means_,2)).replace('\r','').replace('\n',''), 
-                    # str(np.round(gmm.covariances_,2)).replace('\r','').replace('\n',''), 
-                    str(np.round(gmm.weights_, 2)).replace('\r','').replace('\n',''))
+            print('GMM weights for label', label, ":",
+                  str(np.round(gmm.weights_, 2)).replace('\r', '').replace('\n', ''))
         X_new, _ = gmm.sample(nobs)
-        batch=pd.DataFrame(X_new)
-        batch['label']=[label]*len(batch)
-        final_data=pd.concat([final_data,batch],axis=0)
+        X_new = np.clip(X_new, 0, None)                 # spectra are non-negative
+        batch = pd.DataFrame(X_new)
+        batch['label'] = [label] * len(batch)
+        final_data = pd.concat([final_data, batch], axis=0)
 
     final_data.reset_index(drop=True, inplace=True)
-    return final_data.iloc[:,:-1],final_data.iloc[:,-1]
+    return final_data.iloc[:, :-1], final_data.iloc[:, -1]

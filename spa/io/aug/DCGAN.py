@@ -1,211 +1,171 @@
 '''
-DCGAN (Deep Convolutional GAN)
+DCGAN (Deep Convolutional GAN) for 1-D spectroscopic profiling data.
+
+PyTorch implementation (the previous version was TensorFlow/Keras). It uses 1-D
+(transpose-)convolutions, BatchNorm and LeakyReLU following the DCGAN recipe,
+trains with the standard (non-saturating) BCE adversarial loss, and selects the
+device with the CUDA -> MPS -> CPU priority.
+
+Inputs are min-max scaled to [0, 1] before training (the generator ends with a
+Sigmoid) and mapped back / clipped to be non-negative on output, which keeps the
+adversarial training stable for raw spectra whose magnitudes span many orders.
 '''
 
-import pandas as pd
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras.layers import Input, Reshape, Conv1D, Dense, Dropout, Flatten, BatchNormalization, LeakyReLU, GaussianNoise, ReLU
-
-def make_generator_model(noise_dim, feature_dim, kernel_size, kernel_strides):
-
-    model = tf.keras.Sequential()
-
-    model.add(Input(shape=(noise_dim,)))
-    model.add(Reshape([noise_dim, 1]))
-    model.add(Conv1D(kernel_size=kernel_size, filters=256, 
-                     activation='leaky_relu', strides=kernel_strides))  # (opt) (number of filters and kernel size)
-    model.add(Dropout(0.2))  # (opt) (dropout probability)
-
-    model.add(Conv1D(kernel_size=kernel_size, filters=128, strides=kernel_strides))  # (opt) (number of filters and kernel size)
-    model.add(BatchNormalization())
-    model.add(ReLU())
-
-    model.add(Dropout(0.2))  # (opt) (dropout probability)
-
-    model.add(Flatten())                                                    #(opt) (number of nodes in layer)
-    model.add(Dense(feature_dim))
-    model.compile()
-
-    assert model.output_shape == (None, feature_dim)
-
-    return model
+import pandas as pd
+import torch
+import torch.nn as nn
+from sklearn.preprocessing import MinMaxScaler
+from ...device import resolve_device
 
 
-def make_discriminator_model(feature_dim, kernel_size, kernel_strides):
-
-    model = tf.keras.Sequential()
-
-    model.add(Input(shape=(feature_dim,)))
-    model.add(Reshape([feature_dim, 1]))
-    model.add(Conv1D(kernel_size=kernel_size, filters=256, activation='leaky_relu', strides=kernel_strides))  # (opt) (number of filters and kernel size)
-    model.add(Dropout(0.2))  # (opt) (dropout probability)
-
-    model.add(Conv1D(kernel_size=kernel_size, filters=128, strides=kernel_strides))  # (opt) (number of filters and kernel size)
-    model.add(BatchNormalization())
-    model.add(LeakyReLU(alpha=0.01))
-
-    # model.add(MaxPool1D())
-    model.add(Dropout(0.2))  # (opt) (dropout probability)
-
-    model.add(Flatten())
-    model.add(Dense(64))  # (opt) (number of nodes in layer)
-    model.add(Dense(1))
-    model.compile()
-
-    return model
+def _conv_out(length, kernel=4, stride=2, padding=1):
+    return (length + 2 * padding - kernel) // stride + 1
 
 
-def generate_data(model, num_synthetic_to_gen=1,noise_dim=100):
-    """
-      Function that takes in the generator model and
-      does a prediction and returns it as a numpy array.
-    """
-    noise_input = tf.random.normal([num_synthetic_to_gen, noise_dim])
-    predictions = model(noise_input, training=False)
-    predictions = predictions.numpy()
-    return predictions
+class Generator(nn.Module):
+    '''noise -> (transpose-)conv stack -> linear projection to feature_dim.'''
+
+    def __init__(self, noise_dim, feature_dim, base_len=16, base_ch=128):
+        super().__init__()
+        self.base_len = base_len
+        self.base_ch = base_ch
+        self.fc = nn.Linear(noise_dim, base_ch * base_len)
+        self.conv = nn.Sequential(
+            nn.ConvTranspose1d(base_ch, base_ch // 2, 4, 2, 1, bias=False),   # x2
+            nn.BatchNorm1d(base_ch // 2),
+            nn.ReLU(True),
+            nn.ConvTranspose1d(base_ch // 2, base_ch // 4, 4, 2, 1, bias=False),  # x2
+            nn.BatchNorm1d(base_ch // 4),
+            nn.ReLU(True),
+            nn.Conv1d(base_ch // 4, 1, 3, 1, 1),
+        )
+        self.out = nn.Linear(base_len * 4, feature_dim)   # exact mapping to feature_dim
+        self.act = nn.Sigmoid()                            # data scaled to [0, 1]
+
+    def forward(self, z):
+        x = self.fc(z).view(z.size(0), self.base_ch, self.base_len)
+        x = self.conv(x).flatten(1)
+        return self.act(self.out(x))
 
 
-def train_step(data, batch_size, noise_dim, generator, discriminator, generator_optimizer, discriminator_optimizer):
-    """
-      Function for implementing one training step
-      of the GAN model
-    """
+class Discriminator(nn.Module):
+    '''1-D conv classifier; outputs a real/fake logit (use BCEWithLogitsLoss).'''
 
-    def generator_loss(fake_output):
-        return tf.keras.losses.BinaryCrossentropy(from_logits=True)(tf.ones_like(fake_output), fake_output)
+    def __init__(self, feature_dim):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(1, 32, 4, 2, 1),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
+            nn.Conv1d(32, 64, 4, 2, 1),
+            nn.BatchNorm1d(64),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
+        )
+        l2 = _conv_out(_conv_out(feature_dim))
+        assert l2 >= 1, 'feature_dim too small for the 1-D DCGAN discriminator'
+        self.fc = nn.Linear(64 * l2, 1)
 
-    def discriminator_loss(real_output, fake_output):
-        return tf.keras.losses.BinaryCrossentropy(from_logits=True)(tf.ones_like(real_output), real_output) + tf.keras.losses.BinaryCrossentropy(from_logits=True)(tf.zeros_like(fake_output), fake_output)
-
-    noise = tf.random.normal([batch_size, noise_dim], seed=1)
-
-    with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-        generated_data = generator(noise, training=True)
-
-        real_output = discriminator(data, training=True)
-        fake_output = discriminator(generated_data, training=True)
-
-        gen_loss = generator_loss(fake_output)
-        disc_loss = discriminator_loss(real_output, fake_output)
-    #       acc = calc_accuracy(fake_output)
-
-    gradients_of_generator = gen_tape.gradient(gen_loss, generator.trainable_variables)
-    gradients_of_discriminator = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
-
-    generator_optimizer.apply_gradients(zip(gradients_of_generator, generator.trainable_variables))
-    discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
-
-    return gen_loss, disc_loss
+    def forward(self, x):
+        x = x.unsqueeze(1)                 # (B, 1, feature_dim)
+        x = self.net(x).flatten(1)
+        return self.fc(x)                  # logits
 
 
-def train(dataset, epochs, batch, noise_dim, 
-          generator, discriminator, generator_optimizer, discriminator_optimizer, 
-          verbose=True):
-    """
-      Main GAN Training Function
-    """
-    epochs_gen_losses, epochs_disc_losses, epochs_accuracies = [], [], []
+def train_dcgan(X, noise_dim=100, epochs=500, batch_size=16, lr=2e-4,
+                device=None, verbose=True):
+    '''Train a DCGAN on a single (already scaled) class matrix X.'''
+    device = resolve_device(device)
+    feature_dim = X.shape[1]
+
+    data = torch.tensor(np.asarray(X), dtype=torch.float32)
+    loader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(data), batch_size=batch_size, shuffle=True)
+
+    G = Generator(noise_dim, feature_dim).to(device)
+    D = Discriminator(feature_dim).to(device)
+    criterion = nn.BCEWithLogitsLoss()
+    optG = torch.optim.Adam(G.parameters(), lr=lr, betas=(0.5, 0.999))
+    optD = torch.optim.Adam(D.parameters(), lr=lr, betas=(0.5, 0.999))
+
     for epoch in range(epochs):
+        g_loss = d_loss = 0.0
+        for (real,) in loader:
+            b = real.size(0)
+            if b < 2:                      # BatchNorm needs >1 sample
+                continue
+            real = real.to(device)
+            ones = torch.ones(b, 1, device=device)
+            zeros = torch.zeros(b, 1, device=device)
 
-        gen_losses, disc_losses, accuracies = [], [], []
+            # --- train discriminator ---
+            z = torch.randn(b, noise_dim, device=device)
+            fake = G(z)
+            lossD = criterion(D(real), ones) + criterion(D(fake.detach()), zeros)
+            optD.zero_grad()
+            lossD.backward()
+            optD.step()
 
-        for data_batch in dataset:
-            gen_loss, disc_loss = train_step(data_batch, batch, noise_dim, generator, discriminator,
-                                             generator_optimizer, discriminator_optimizer)
-            #       accuracies.append(acc)
-            gen_losses.append(gen_loss)
-            disc_losses.append(disc_loss)
+            # --- train generator (non-saturating) ---
+            lossG = criterion(D(fake), ones)
+            optG.zero_grad()
+            lossG.backward()
+            optG.step()
 
-        epoch_gen_loss = np.average(gen_losses)
-        epoch_disc_loss = np.average(disc_losses)
-        epoch_accuracy = np.average(accuracies)
-        epochs_gen_losses.append(epoch_gen_loss)
-        epochs_disc_losses.append(epoch_disc_loss)
-        
-        if verbose:
-            print("Epoch: {}/{}".format(epoch + 1, epochs))
-            print("Generator Loss: {}, Discriminator Loss: {}".format(epoch_gen_loss, epoch_disc_loss))
-        
-    # Draw the model every 2 epochs
-    #     if (epoch + 1) % 2 == 0:
-    #         draw_training_evolution(generator, epoch+1)
+            g_loss, d_loss = float(lossG), float(lossD)
 
-    # Save the model every 2 epochs for the last 2000 epochs
-    #     if (epoch + 1) % 2 == 0 and epoch > (numofEPOCHS - 2000):
-    #           checkpoint.save(file_prefix = checkpoint_prefix)   # Comment not to save model checkpoints while training
+        if verbose and (epoch % 50 == 0 or epoch == epochs - 1):
+            print(f'Epoch {epoch + 1}/{epochs}  G {g_loss:.4f}  D {d_loss:.4f}')
 
-    return epochs_gen_losses, epochs_disc_losses
+    return G, D, device
 
 
-def expand_dataset(X, y, nobs, X_names=None, epochs=500, batch_size=16, noise_dim=100, verbose=True):
+def expand_dataset(X, y, nobs, X_names=None, epochs=500, batch_size=16,
+                   noise_dim=100, cuda=None, verbose=True):
     '''
-    Generate equal number of samples for each class.
+    Generate ``nobs`` synthetic samples per class with a 1-D DCGAN.
 
-    nobs : samples to generate per class.
+    Returns the SYNTHETIC samples only (X_new, y_new) as DataFrames/Series,
+    consistent with the other generators in this package.
     '''
-
-    if X.shape[1] >= 100:
-        kernel_size = 15
-        kernel_strides = 2
-    else:
-        kernel_size = round(X.shape[1]/15)*2+1
-        kernel_strides = 1
-    
-    if verbose:
-        print('DCGAN will use kernel size', kernel_size, ' and strides', kernel_strides)
-    
     if not X_names:
         X_names = list(range(X.shape[1]))
 
+    X = np.asarray(X, dtype=float)
+    y = np.asarray(y)
+    device = resolve_device(cuda)
+
     synth_data = pd.DataFrame()
-    for label in set(y):
-        data = pd.concat([pd.DataFrame(X, columns=X_names), pd.DataFrame(y, columns=['label'])], axis=1)
-        data = data[data['label'] == label]
-        X0 = data.iloc[:, :-1]
-        y0 = data.iloc[:, -1]
-        X0.columns = X0.columns.astype(float)
-        column_labels = X0.columns.tolist
-        data_raw = X0.to_numpy()
-        data_processed = data_raw
-        train_data = data_processed
+    for label in np.unique(y):
+        X0 = X[y == label]
 
-        data_size = train_data.shape[0]
-        batch = batch_size
-        train_dataset = tf.data.Dataset.from_tensor_slices(train_data).shuffle(data_size).batch(batch)
-        feature_dim = train_data.shape[1]
+        # scale to [0, 1] for stable adversarial training
+        scaler = MinMaxScaler()
+        train_data = scaler.fit_transform(X0)
 
-        generator = make_generator_model(noise_dim, feature_dim, kernel_size, kernel_strides)
-        noise = tf.random.normal([1, noise_dim])
-        generated_data = generator(noise, training=False)
+        G, _, device = train_dcgan(train_data, noise_dim=noise_dim, epochs=epochs,
+                                   batch_size=batch_size, device=device, verbose=verbose)
 
-        discriminator = make_discriminator_model(feature_dim, kernel_size, kernel_strides)
-        decision = discriminator(generated_data)
-        generator_optimizer = tf.keras.optimizers.Adam(1e-3)
-        discriminator_optimizer = tf.keras.optimizers.Adam(1e-3)
-        #     tf.config.experimental_run_functions_eagerly(True)
+        G.eval()
+        with torch.no_grad():
+            z = torch.randn(nobs, noise_dim, device=device)
+            generated = G(z).cpu().numpy()
+        generated = np.clip(scaler.inverse_transform(generated), 0, None)  # original scale, non-negative
 
-        _ = train(train_dataset, epochs=epochs, batch=batch_size,
-                  noise_dim=noise_dim, generator=generator, discriminator=discriminator,
-                  generator_optimizer=generator_optimizer,
-                  discriminator_optimizer=discriminator_optimizer, 
-                  verbose=verbose)
-
-        generated_batch = generate_data(generator, num_synthetic_to_gen=nobs,noise_dim=noise_dim)
-        df = pd.DataFrame(generated_batch, columns= X_names)
-        df['label'] = len(df) * [label]
+        df = pd.DataFrame(generated, columns=X_names)
+        df['label'] = [label] * len(df)
         synth_data = pd.concat([synth_data, df], axis=0)
 
         if verbose:
-
-            from keras.utils import plot_model
-            import IPython.display
-
-            IPython.display.display(IPython.display.HTML('<b>generator</b>'))
-            IPython.display.display(plot_model(generator,show_shapes=True))
-            IPython.display.display(IPython.display.HTML('<b>discriminator</b>'))
-            IPython.display.display(plot_model(discriminator, show_shapes=True))
+            try:
+                from torchviz import make_dot
+                import IPython.display
+                dummy = torch.zeros(2, noise_dim, device=device)
+                IPython.display.display(IPython.display.HTML('<b>DCGAN generator</b>'))
+                IPython.display.display(make_dot(G(dummy)))
+            except Exception:
+                pass
 
     synth_data.reset_index(drop=True, inplace=True)
-    return synth_data.iloc[:, :-1], synth_data.iloc[:, -1] #, generator_plot, discriminator_plot
+    return synth_data.iloc[:, :-1], synth_data.iloc[:, -1]

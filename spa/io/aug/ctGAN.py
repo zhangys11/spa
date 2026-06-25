@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 def expand_dataset(X, y, nobs, 
                    embedding_dim=128, generator_dim=(256, 256), discriminator_dim=(256, 256), 
-                   epochs=20, batch_size=100, cuda = True, verbose=True):
+                   epochs=20, batch_size=100, cuda = None, verbose=True):
     '''
     use ctGAN to upsample
 
@@ -14,27 +14,35 @@ def expand_dataset(X, y, nobs,
     verbose: when True, will output generator's architecture graph.
     '''
 
+    import torch
+    from ...device import resolve_device
+
+    device = resolve_device(cuda)            # CUDA -> MPS -> CPU
+    # ctgan reliably supports only CUDA/CPU, so pass a plain bool
+    # (True only when a CUDA device is selected); otherwise it runs on CPU.
+    ctgan_cuda = (device.type == 'cuda')
+
     train_data = pd.concat([pd.DataFrame(X), pd.DataFrame(y, columns=[-1])], axis=1)
     train_data.columns = train_data.columns.astype(str)
     conditions = [train_data.columns[-1]]
     
     ctgan = CTGAN(batch_size=batch_size,
                   embedding_dim=embedding_dim, generator_dim=generator_dim, discriminator_dim=discriminator_dim,
-                  cuda=cuda, verbose = True)
+                  cuda=ctgan_cuda, verbose = verbose)
     ctgan.fit(train_data,
               discrete_columns = conditions, # [train_data.shape[1]-1] # Default use y. discrete_columns (list-like): List of discrete columns to be used to generate the Conditional Vector. If train_data is a Numpy array, this list should contain the integer indices of the columns. Otherwise, if it is a pandas.DataFrame, this list should contain the column names.
               epochs=epochs)
     
     if verbose:
 
-        import torch
         from torchviz import make_dot
         import IPython.display
 
+        dev = getattr(ctgan, '_device', torch.device('cpu'))
         input_vec = torch.zeros(batch_size, 
                                 ctgan._embedding_dim + ctgan._data_sampler.dim_cond_vec(), 
-                                dtype=torch.float, requires_grad=False)
-        IPython.display.display(make_dot(ctgan._generator(input_vec.to('cuda') if cuda else input_vec)))
+                                dtype=torch.float, requires_grad=False).to(dev)
+        IPython.display.display(make_dot(ctgan._generator(input_vec)))
     
     synthetic_data = ctgan.sample(nobs)
     X_new = synthetic_data.iloc[:, :-1]
@@ -42,10 +50,12 @@ def expand_dataset(X, y, nobs,
     return X_new, y_new
 
 
-def expand_dataset_stratified(X, y, NX = 3, epochs = 10, batch_size = 100, cuda = True, verbose = True):
+def expand_dataset_stratified(X, y, NX = 3, epochs = 10, batch_size = 100, cuda = None, verbose = True):
     '''
     A stratified version of ctgan aug. It uses all features as condition vector?
     ''' 
+    from ...device import resolve_device
+    ctgan_cuda = (resolve_device(cuda).type == 'cuda')   # ctgan: CUDA or CPU
     Xnew = np.array(X).copy()
     ynew = list(y)
 
@@ -53,7 +63,7 @@ def expand_dataset_stratified(X, y, NX = 3, epochs = 10, batch_size = 100, cuda 
 
         Xc = X[y == c]
        
-        ctgan = CTGAN(generator_dim=(128,128), discriminator_dim=(128,128), epochs = epochs, batch_size = batch_size, cuda = cuda)
+        ctgan = CTGAN(generator_dim=(128,128), discriminator_dim=(128,128), epochs = epochs, batch_size = batch_size, cuda = ctgan_cuda)
         ctgan.fit(Xc, discrete_columns = [i for i in range(Xc.shape[1])])
 
         if verbose:

@@ -12,8 +12,10 @@ import torchvision.transforms as transforms
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
+from sklearn.preprocessing import MinMaxScaler
+from ...device import resolve_device
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = resolve_device()   # CUDA -> MPS -> CPU
 
 class TorchDataset(Dataset):
     def __init__(self, X):
@@ -24,8 +26,8 @@ class TorchDataset(Dataset):
 
     def __getitem__(self, idx):
         sample = self.X[idx]
-        sample = torch.from_numpy(sample)
-        return sample
+        # float32: MPS (Apple Silicon) does not support float64 tensors
+        return torch.from_numpy(np.asarray(sample, dtype=np.float32))
 
 def train_wgan(X, noise_dim = 100, 
                clip_value = 0.1, lr = 1e-4, 
@@ -65,7 +67,7 @@ def train_wgan(X, noise_dim = 100,
         for step, data in enumerate(trainloader):
 
             # training netD
-            data = torch.unsqueeze(data.to(device), 1).float()
+            data = torch.unsqueeze(data.float().to(device), 1)
             b_size = data.size(0)
             netD.zero_grad()
 
@@ -157,15 +159,21 @@ def expand_dataset(X, y, nobs, X_names=None,
         Xi = data.iloc[:, :-1]
         yi = data.iloc[:, -1]
         Xi.columns = Xi.columns.astype(float)
-        
-        g, d = train_wgan(Xi.values, noise_dim=noise_dim, 
-                          clip_value = 0.1, lr = 1e-3,
+
+        # Scale to [0, 1] for stable WGAN training (the generator ends with Tanh);
+        # generated samples are mapped back and clipped to be non-negative.
+        scaler = MinMaxScaler()
+        Xi_scaled = scaler.fit_transform(Xi.values)
+
+        g, d = train_wgan(Xi_scaled, noise_dim=noise_dim,
+                          clip_value = 0.1, lr = 1e-4,
                           epochs=epochs, batch_size=batch_size, 
                           verbose = verbose)
         
         noise = torch.randn(nobs, noise_dim, 1, device=device)
         fake = g(noise).squeeze(1).cpu().detach().numpy()
-        
+        fake = np.clip(scaler.inverse_transform(fake), 0, None)
+
         df = pd.DataFrame(fake, columns = X_names)
         df['label'] = len(df) * [label]
         synth_data = pd.concat([synth_data, df], axis=0)

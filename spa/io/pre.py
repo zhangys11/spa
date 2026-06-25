@@ -6,8 +6,30 @@ from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
 from scipy.optimize import minimize
 from scipy.interpolate import interp1d
-from scipy.ndimage.interpolation import shift
-from statsmodels.tsa.stattools import ccovf
+from scipy.ndimage import shift
+
+
+def _ccovf(a, b, demean=False, adjusted=False):
+    '''
+    Cross-covariance function between two 1-D sequences (non-negative lags).
+
+    Drop-in replacement for ``statsmodels.tsa.stattools.ccovf`` implemented with
+    ``scipy.signal.correlate`` -- exactly the computation statsmodels performs
+    internally -- so spa no longer depends on statsmodels.
+
+    For lag k (k = 0..n-1):
+        cc[k] = (1/d_k) * sum_t (a[t+k]-abar?) * (b[t]-bbar?)
+    with d_k = n (adjusted=False) or d_k = n-k (adjusted=True), and the means
+    subtracted only when ``demean`` is True.
+    '''
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
+    n = len(a)
+    if demean:
+        a = a - a.mean()
+        b = b - b.mean()
+    cc = signal.correlate(a, b, 'full')[n - 1:]          # lags 0..n-1
+    return cc / (np.arange(n, 0, -1) if adjusted else n)
 
 ############# feature filter by threshold ##############
 def x_thresholding(X, threshold = 10):
@@ -334,11 +356,11 @@ def phase_align(reference, target, roi, res=100):
     r2 -= r2.mean()
 
     # compute cross covariance 
-    cc = ccovf(r1,r2,demean=False,unbiased=False)
+    cc = _ccovf(r1, r2)
 
     # determine if shift if positive/negative 
     if np.argmax(cc) == 0:
-        cc = ccovf(r2,r1,demean=False,unbiased=False)
+        cc = _ccovf(r2, r1)
         mod = -1
     else:
         mod = 1

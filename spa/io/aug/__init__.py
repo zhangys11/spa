@@ -10,9 +10,75 @@ from IPython.display import display, HTML
 from ...vis import plot_components_2d
 from . import SMOTE, Gaussian, GMM, KDE, metrics
 
+
+_SMOTE_FAMILY = {'SMOTE', 'SMOTEORIGINAL', 'BORDERLINESMOTE', 'ADASYN',
+                 'SVMSMOTE', 'KMEANSSMOTE', 'SMOTENC', 'SMOTEN',
+                 'SMOTEENN', 'SMOTETOMEK'}
+
+
+def _norm_method(name):
+    return name.replace('-', '').replace('_', '').upper()
+
+
+def _resolve_cuda(cuda):
+    '''Resolve a user cuda flag to a device string, priority CUDA -> MPS -> CPU.'''
+    try:
+        from ...device import resolve_device_str
+        return resolve_device_str(cuda)
+    except Exception:
+        return 'cpu'
+
+
+def _smote_resample(method, X, y, sampling_strategy='auto',
+                    k_neighbors=5, random_state=None, categorical_features=None):
+    '''
+    Run a SMOTE-family over-sampler on the FULL dataset (both classes are needed
+    so that Borderline / ADASYN / SVM can locate the decision boundary).
+
+    Returns
+    -------
+    X_new, y_new : the synthetic samples only (for fidelity evaluation).
+    X_aug, y_aug : the full resampled set (for the classification task). For the
+        cleaning variants (ENN / Tomek) this is the SMOTE-then-cleaned set.
+    '''
+    X = np.asarray(X, dtype=float)
+    y = np.asarray(y)
+    n0 = len(X)
+    m = _norm_method(method)
+
+    if m in ('SMOTEENN', 'SMOTETOMEK'):
+        X_sm, y_sm = SMOTE.smote(X, y, sampling_strategy=sampling_strategy,
+                                 k_neighbors=k_neighbors, random_state=random_state)
+        X_new, y_new = X_sm[n0:], y_sm[n0:]
+        if m == 'SMOTEENN':
+            X_aug, y_aug = SMOTE._enn_clean(X_sm, y_sm)
+        else:
+            X_aug, y_aug = SMOTE._tomek_clean(X_sm, y_sm)
+        return X_new, y_new, X_aug, y_aug
+
+    if m == 'SMOTENC':
+        X_res, y_res = SMOTE.smote_nc(X, y, categorical_features or [],
+                                      sampling_strategy=sampling_strategy,
+                                      k_neighbors=k_neighbors, random_state=random_state)
+    elif m == 'SMOTEN':
+        X_res, y_res = SMOTE.smote_n(X, y, sampling_strategy=sampling_strategy,
+                                     k_neighbors=k_neighbors, random_state=random_state)
+    else:
+        fn = {'SMOTE': SMOTE.smote,
+              'SMOTEORIGINAL': SMOTE.smote_original,
+              'BORDERLINESMOTE': SMOTE.borderline_smote,
+              'ADASYN': SMOTE.adasyn,
+              'SVMSMOTE': SMOTE.svm_smote,
+              'KMEANSSMOTE': SMOTE.kmeans_smote}[m]
+        X_res, y_res = fn(X, y, sampling_strategy=sampling_strategy,
+                          k_neighbors=k_neighbors, random_state=random_state)
+    return X_res[n0:], y_res[n0:], X_res, y_res
+
+
 def upsample(target_path, X, y, X_names, method = 'SMOTE', folds = 3, d = 0.5, 
 embedding_dim = 128, generator_dim = (256, 256), discriminator_dim = (256, 256),
-epochs = 10, batch_size = 100, cuda = True, display = False, verbose = True):
+epochs = 10, batch_size = 100, cuda = None, display = False, verbose = True,
+target_label = None, k_neighbors = 5, categorical_features = None, random_state = None):
     '''
     Upsample a dataset by SMOTE, KDE, GMM, VAE, TVAE, GAN, DCGAN, ctGAN, etc.
 
@@ -30,9 +96,20 @@ epochs = 10, batch_size = 100, cuda = True, display = False, verbose = True):
         return X, y
     
     nobs = folds*len(X)
+    cuda = _resolve_cuda(cuda)
 
-    if method == 'SMOTE':
-        Xn, yn = SMOTE.expand_dataset(X, y, d, folds)
+    if _norm_method(method) in _SMOTE_FAMILY:
+        # SMOTE family operates on the full dataset (needs both classes).
+        yv = np.asarray(y)
+        if target_label is not None:
+            cur = int(np.sum(yv == target_label))
+            ss = {target_label: cur * (1 + folds)}
+        else:
+            classes, counts = np.unique(yv, return_counts=True)
+            ss = {c: int(cnt * (1 + folds)) for c, cnt in zip(classes, counts)}
+        Xn, yn, _, _ = _smote_resample(method, X, y, sampling_strategy=ss,
+                                       k_neighbors=k_neighbors, random_state=random_state,
+                                       categorical_features=categorical_features)
     elif method == 'Gaussian' or method=='gaussian':
         Xn, yn = Gaussian.expand_dataset(X, y, nobs)
     elif method == 'GMM' or method=='gmm':
@@ -41,19 +118,19 @@ epochs = 10, batch_size = 100, cuda = True, display = False, verbose = True):
         Xn, yn = KDE.expand_dataset(X, y, nobs)
     elif method == 'MDN':
         from . import MDN
-        Xn, yn = MDN.expand_dataset(X, y, nobs, epochs=epochs, verbose=verbose)
+        Xn, yn = MDN.expand_dataset(X, y, nobs, epochs=epochs, cuda=cuda, verbose=verbose)
     elif method == 'VAE':
         from . import VAE
-        Xn, yn = VAE.expand_dataset(X, y, nobs, X_names, verbose=verbose)
+        Xn, yn = VAE.expand_dataset(X, y, nobs, X_names, cuda=cuda, verbose=verbose)
     elif method == 'TVAE':
         from . import TVAE
-        Xn, yn = TVAE.expand_dataset(X, y, nobs, epochs=epochs, verbose=verbose)
+        Xn, yn = TVAE.expand_dataset(X, y, nobs, epochs=epochs, cuda=cuda, verbose=verbose)
     elif method == 'GAN':
         from . import GAN
-        Xn, yn = GAN.expand_dataset(X, y, nobs, epochs=epochs, batch_size=batch_size, noise_dim=100, X_names=X_names, verbose=verbose)
+        Xn, yn = GAN.expand_dataset(X, y, nobs, epochs=epochs, batch_size=batch_size, noise_dim=100, X_names=X_names, cuda=cuda, verbose=verbose)
     elif method == 'DCGAN':
         from . import DCGAN
-        Xn, yn = DCGAN.expand_dataset(X, y, nobs, epochs=epochs, batch_size=batch_size, noise_dim=100, X_names=X_names, verbose=verbose)
+        Xn, yn = DCGAN.expand_dataset(X, y, nobs, epochs=epochs, batch_size=batch_size, noise_dim=100, X_names=X_names, cuda=cuda, verbose=verbose)
     elif method == 'WGAN':
         from . import WGAN
         Xn, yn = WGAN.expand_dataset(X, y, nobs, epochs=epochs, batch_size=batch_size, noise_dim=100, X_names=X_names, verbose=verbose)
@@ -95,10 +172,12 @@ epochs = 10, batch_size = 100, cuda = True, display = False, verbose = True):
     return Xn, yn
 
 def upsample_tryall(X, y, X_names,
-                    methods = ['Gaussian', 'GMM', 'KDE', 'MDN', 'VAE', 'TVAE', 'GAN', 'DCGAN', 'WGAN', 'CTGAN'], 
+                    methods = ['SMOTE', 'BorderlineSMOTE', 'ADASYN', 'SVMSMOTE', 'KMeansSMOTE',
+                               'Gaussian', 'GMM', 'KDE', 'MDN', 'VAE', 'TVAE', 'GAN', 'DCGAN', 'WGAN', 'CTGAN'], 
                     target_label=None, folds = 3, d = 0.5, output_dir = './output',
                     embedding_dim = 128, generator_dim = (256, 256), discriminator_dim = (256, 256),
-                    epochs = 10, batch_size = 100, cuda = True, display = False, verbose = True):
+                    epochs = 10, batch_size = 100, cuda = None, display = False, verbose = True,
+                    k_neighbors = 5, categorical_features = None, random_state = None):
 
     if isinstance(target_label, int):
         Xs = X[np.where(y == target_label)]
@@ -119,18 +198,41 @@ def upsample_tryall(X, y, X_names,
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    cuda = _resolve_cuda(cuda)
+
     for model in methods:
         
         if verbose:
             print('--- Data Augmentation using', model, '---')
 
-        X_new, y_new = upsample(output_dir + '/' + model + '_' + ts + '.csv', Xs, ys, X_names, method=model, folds=folds, d=d,
-                                embedding_dim=embedding_dim, generator_dim=generator_dim, discriminator_dim=discriminator_dim,
-                                epochs=epochs, batch_size=batch_size, cuda=cuda, display=display, verbose=verbose)
+        if _norm_method(model) in _SMOTE_FAMILY:
+            # SMOTE family needs BOTH classes; operate on the full dataset and
+            # split the result into "synthetic only" (fidelity) and the full
+            # resampled set (classification).
+            if isinstance(target_label, int):
+                cur = int(np.sum(np.asarray(y) == target_label))
+                ss = {target_label: cur * (1 + folds)}
+            else:
+                ss = 'auto'
+            X_new, y_new, X_a, y_a = _smote_resample(
+                model, X, y, sampling_strategy=ss, k_neighbors=k_neighbors,
+                random_state=random_state, categorical_features=categorical_features)
+            if output_dir:
+                df = pd.concat([pd.DataFrame(y_new, columns=['label']),
+                                pd.DataFrame(X_new, columns=X_names)], axis=1)
+                df.to_csv(output_dir + '/' + model + '_' + ts + '.csv', index=False)
+        else:
+            X_new, y_new = upsample(output_dir + '/' + model + '_' + ts + '.csv', Xs, ys, X_names, method=model, folds=folds, d=d,
+                                    embedding_dim=embedding_dim, generator_dim=generator_dim, discriminator_dim=discriminator_dim,
+                                    epochs=epochs, batch_size=batch_size, cuda=cuda, display=display, verbose=verbose,
+                                    k_neighbors=k_neighbors, random_state=random_state)
+            X_a = np.vstack((X_new, X))  # synth data + original data
+            y_a = np.hstack((y_new, y))  # synth data + original data
+
         X_synth.append(X_new)
         y_synth.append(y_new)
-        X_aug.append(np.vstack((X_new, X))) # synth data + original data
-        y_aug.append(np.hstack((y_new, y))) # synth data + original data
+        X_aug.append(X_a)
+        y_aug.append(y_a)
 
 
     baseline = pd.concat([pd.DataFrame(X, columns=X_names),pd.DataFrame(y,columns=['label'])],axis=1)

@@ -7,7 +7,7 @@ from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.base import BaseEstimator, RegressorMixin
 import itertools
 from tqdm import tqdm
-from IPython.core.display import display, HTML
+from IPython.display import display, HTML
 import matplotlib
 matplotlib.rcParams['font.family'] = 'DejaVu Sans'
 
@@ -292,32 +292,48 @@ def run_regressors(X_train, X_val, X_test, y_train, y_val, y_test,
             yp = rf_regressor.predict(X_test)
 
         elif clf_name == 'ANN':
-            from keras.models import Sequential
-            from keras.layers import Dense
-            
-            # create ANN model
-            model = Sequential()
-            
-            # Defining the Input layer and FIRST hidden layer, both are same!
-            model.add(Dense(units=10, input_dim=X_train.shape[1], kernel_initializer='normal', activation='sigmoid'))
+            import torch
+            import torch.nn as nn
+            from torch.utils.data import DataLoader, TensorDataset
+            from .device import resolve_device
 
-            # Defining the Second layer of the model
-            # after the first layer we don't have to specify input_dim as keras configure it automatically
-            # model.add(Dense(units=3, kernel_initializer='normal', activation='tanh'))
-            
-            # The output neuron is a single fully connected node 
-            # Since we will be predicting a single number
-            model.add(Dense(1, kernel_initializer='normal'))
-            
-            # Compiling the model
-            model.compile(loss='mean_squared_error', optimizer='rmsprop')
+            best_hparam = None          # ANN has no tuned hyper-parameter here
+            device = resolve_device()   # CUDA -> MPS -> CPU
+
+            # MLP regressor (PyTorch; was keras): feature_dim -> 10 (sigmoid) -> 1
+            model = nn.Sequential(
+                nn.Linear(X_train.shape[1], 10),
+                nn.Sigmoid(),
+                nn.Linear(10, 1),
+            ).to(device)
+            for m in model:                       # keras 'normal' init ~ N(0, 0.05)
+                if isinstance(m, nn.Linear):
+                    nn.init.normal_(m.weight, 0.0, 0.05)
+                    nn.init.zeros_(m.bias)
+
+            Xtr = torch.tensor(np.asarray(X_train), dtype=torch.float32, device=device)
+            ytr = torch.tensor(np.asarray(y_train), dtype=torch.float32, device=device).view(-1, 1)
+            criterion = nn.MSELoss()
+            optimizer = torch.optim.RMSprop(model.parameters())
+            loader = DataLoader(TensorDataset(Xtr, ytr), batch_size=2, shuffle=True)
+
             if verbose > 2:
-                model.summary()
+                print(model)
 
             # Fitting the ANN to the Training set
-            model.fit(X_train, np.array(y_train), batch_size = 2, epochs = 500, verbose=False)
-            y_pred_train = model.predict(X_train).flatten()
-            yp = model.predict(X_test).flatten()
+            model.train()
+            for _ in range(500):
+                for xb, yb in loader:
+                    optimizer.zero_grad()
+                    loss = criterion(model(xb), yb)
+                    loss.backward()
+                    optimizer.step()
+
+            model.eval()
+            with torch.no_grad():
+                y_pred_train = model(Xtr).cpu().numpy().flatten()
+                Xte = torch.tensor(np.asarray(X_test), dtype=torch.float32, device=device)
+                yp = model(Xte).cpu().numpy().flatten()
 
         elif clf_name=='K-Neighbors Regressor':
             from sklearn.neighbors import KNeighborsRegressor
