@@ -6,7 +6,7 @@ setup(
     name="spa-ds",
 
     # Version number:
-    version="2.0.2",
+    version="2.0.3",
 
     # Application author details:
     author="Yinsheng Zhang (Ph.D.)",
@@ -41,7 +41,6 @@ setup(
         "pandas",
         "scipy",
         "PyWavelets",
-        "statsmodels",
         "seaborn",
         "joblib",
         "tqdm",
