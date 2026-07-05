@@ -8,7 +8,9 @@ from sklearn.linear_model import LogisticRegressionCV, LassoCV, ElasticNetCV, Mu
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.feature_selection import chi2, f_classif, mutual_info_classif, RFE
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.model_selection import StratifiedKFold, cross_val_score
 from scipy.fftpack import fft, dct
+from scipy.stats import skew, kurtosis
 import IPython.display
 
 from ..vis import plot_components_2d, plot_components_3d, plot_feature_importance, unsupervised_dimension_reductions
@@ -538,9 +540,9 @@ def nch_time_series_fs(X, fft_percentage=0.05, dct_percentage=0.1,
                         [1, -4, 6, -4,1], [-1, 5, -10, 10, -5, 1], \
                         [1, -6, 15, -20, 15, -6, 1],  [-1, 7, -21, 35, -35, 21, -7, 1], \
                             [1, -8, 28, -56, 70, -56, 28, -8, 1]],
-                       display=True, y=None, labels=None):
+                       display=True, y=None, labels=None, cv_folds=5):
     '''
-    Multi-channel time series data feature selection. 
+    Multi-channel time series data feature selection.
     Suitable for e-nose and e-tongue signals.
 
     与质谱、光谱不同，电子舌、电子鼻数据反应了各个传感器的时间响应特性。
@@ -548,21 +550,34 @@ def nch_time_series_fs(X, fft_percentage=0.05, dct_percentage=0.1,
 
     提供的基础特征：
 
-        AUC(Area Under CurveA)，积分/面积
-        Max peak height (响应的最高峰值)
-        一阶导数的AUC、max、min
-        二阶导数的AUC、max、min
-        变换域中的低频特征，如FFT、DCT。考虑前5%的低频组分。
-        一维卷积核（sliding window, 1d conv kernel, e.g., Laplace mask)
+     Feature Set 1 — Descriptive Statistics (13 per channel):
+        AUC (area under curve), Max, Min, Mean, Std, Skewness, Kurtosis,
+        1st-derivative AUC/Max/Min, 2nd-derivative AUC/Max/Min
+
+     Feature Set 2 — FFT top-n low-frequency components (default top 5%)
+
+     Feature Set 3 — DCT top-n low-frequency components (default top 10%)
+
+     Feature Sets 4 — 1D convolution kernels (k-order difference operators, k=1..8)
 
     Parameters
     ----------
     X : input data. Should have shape (m,ch,n)
     fft_percentage : default 0.05, means to keep the top 5% FFT components
     dct_percentage : default 0.1, means to keep the top 10% DCT components.
-    conv_masks : convolution masks. default is k-rank 1D-difference operators: [-1,1], [1,-2,1], etc.
+    conv_masks : convolution masks. default is k-rank 1D-difference operators.
+    y, labels : for visualization. If None, uses PCA (unsupervised).
+    cv_folds : number of cross-validation folds for accuracy estimation (default 5).
+               Set to None to skip CV (not recommended; in-sample R2 alone is biased
+               when p > n, see Zhang et al. 2025).
 
-    y, labels : only used in the visualization part. If you don't need visualizaiton, just pass None or ignore.
+    Notes
+    -----
+    When y is binary, the display shows BOTH in-sample PLS R2 (for backwards
+    compatibility) AND stratified cross-validated accuracy. The in-sample R2
+    is marked with a warning because it overestimates true separability when
+    the number of features exceeds the number of samples (p >> n).
+    Cross-validated accuracy is the recommended metric for comparing feature sets.
 
     '''
 
@@ -585,18 +600,23 @@ def nch_time_series_fs(X, fft_percentage=0.05, dct_percentage=0.1,
 
             ch = xx  # one sample's one channel
 
-            ###### Feature Set 1 #######
+            ###### Feature Set 1: Descriptive Statistics #######
 
-            fs1.append(ch.sum())
-            fs1.append(ch.max())
-            der = np.diff(ch)
-            fs1.append(der.sum())
-            fs1.append(der.max())
-            fs1.append(der.min())
-            der2 = np.diff(der)
-            fs1.append(der2.sum())
-            fs1.append(der2.max())
-            fs1.append(der2.min())
+            fs1.append(ch.sum())             # AUC (area under curve)
+            fs1.append(ch.max())             # max peak height
+            fs1.append(ch.min())             # min peak height
+            fs1.append(ch.mean())            # mean (baseline current)
+            fs1.append(ch.std(ddof=1))       # standard deviation (response amplitude)
+            fs1.append(skew(ch))             # skewness (asymmetry of current distribution)
+            fs1.append(kurtosis(ch))         # kurtosis (prevalence of extreme currents)
+            der = np.diff(ch)                # 1st derivative
+            fs1.append(der.sum())            # 1st-derivative AUC
+            fs1.append(der.max())            # 1st-derivative max
+            fs1.append(der.min())            # 1st-derivative min
+            der2 = np.diff(der)              # 2nd derivative
+            fs1.append(der2.sum())           # 2nd-derivative AUC
+            fs1.append(der2.max())           # 2nd-derivative max
+            fs1.append(der2.min())           # 2nd-derivative min
 
             # der3 = np.diff(der2) # adding 3-ord derivative doesn't improve classifiablity
             # fs.append(der3.sum())
@@ -676,12 +696,18 @@ def nch_time_series_fs(X, fft_percentage=0.05, dct_percentage=0.1,
                 lda = LinearDiscriminantAnalysis(n_components=2)
                 f_2d = lda.fit(FS, y).transform(FS)
 
-                # plt.figure(figsize = (20,15))
                 plot_components_2d(f_2d, y, legends=labels)
                 title = name + ' - LDA'
 
-                # Returns the coefficient of determination R^2 of the prediction.
-                title = title + '\nACC = ' + str(np.round(lda.score(FS, y), 3))
+                # In-sample accuracy (reference only — overestimates true performance when p >> n)
+                in_sample_acc = np.round(lda.score(FS, y), 3)
+                title += '\nin-sample ACC = ' + str(in_sample_acc) + '  (ref. only, overfitted when p > n)'
+
+                # Cross-validated accuracy (primary metric)
+                if cv_folds is not None and cv_folds > 1:
+                    skf = StratifiedKFold(n_splits=min(cv_folds, min(np.bincount(y))), shuffle=True, random_state=42)
+                    cv_scores = cross_val_score(lda, FS, y, cv=skf, scoring='accuracy')
+                    title += '\nCV Accuracy = ' + str(np.round(np.mean(cv_scores), 3)) + ' +/- ' + str(np.round(np.std(cv_scores), 3)) + '  (' + str(min(cv_folds, min(np.bincount(y)))) + '-fold stratified)'
 
                 plt.title(title)
                 plt.show()
@@ -691,12 +717,7 @@ def nch_time_series_fs(X, fft_percentage=0.05, dct_percentage=0.1,
                     f_3d = lda.fit(FS, y).transform(FS)
 
                     plot_components_3d(f_3d, y, legends=labels)
-                    title = name + ' - LDA'
-
-                    # Returns the coefficient of determination R^2 of the prediction.
-                    title = title + '\nACC = ' + \
-                        str(np.round(lda.score(FS, y), 3))
-
+                    title = name + ' - LDA (3D)'
                     plt.title(title)
 
             else:
@@ -706,17 +727,28 @@ def nch_time_series_fs(X, fft_percentage=0.05, dct_percentage=0.1,
                 pls = PLSRegression(n_components=2, scale=False)
                 f_2d = pls.fit(FS, y).transform(FS)
 
-                # plt.figure(figsize = (20,15))
                 plot_components_2d(f_2d, y, legends=labels)
                 title = name + ' - PLS'
 
-                # Returns the coefficient of determination R^2 of the prediction.
-                title = title + '\nR2 = ' + str(np.round(pls.score(FS, y), 3))
+                # In-sample R2 (reference only — overestimates true separability when p >> n)
+                in_sample_r2 = np.round(pls.score(FS, y), 3)
+                title += '\nin-sample R2 = ' + str(in_sample_r2) + '  (ref. only, overfitted when p > n)'
+
+                # Cross-validated accuracy (primary metric)
+                if cv_folds is not None and cv_folds > 1:
+                    # Use a simple classifier for CV (PLS-DA-style)
+                    from sklearn.linear_model import LogisticRegression
+                    clf = LogisticRegression(max_iter=5000, random_state=42)
+                    skf = StratifiedKFold(n_splits=min(cv_folds, min(np.bincount(y))), shuffle=True, random_state=42)
+                    cv_scores = cross_val_score(clf, FS, y, cv=skf, scoring='accuracy')
+                    title += '\nCV Accuracy = ' + str(np.round(np.mean(cv_scores), 3)) + ' +/- ' + str(np.round(np.std(cv_scores), 3)) + '  (' + str(min(cv_folds, min(np.bincount(y)))) + '-fold stratified)'
 
                 plt.title(title)
 
             plt.show()
 
         if y is not None:
-            print('The LDA ACC: \nthe mean accuracy on the given test data and labels')
-            print('The PLS R2 score: \nThe score is the coefficient of determination of the prediction, defined as 1 - u/v, where u is the residual sum of squares ((y_true - y_pred)** 2).sum() and v is the total sum of squares ((y_true - y_true.mean()) ** 2).sum(). The best possible score is 1.0 and it can be negative (because the model can be arbitrarily worse). A constant model that always predicts the expected value of y, disregarding the input features, would get a score of 0.0.')
+            print('---')
+            print('The "in-sample R2 / ACC" are computed on the full dataset (overfitted when p > n).')
+            print('Cross-validated (CV) Accuracy is the recommended metric for comparing feature sets.')
+            print('See: Zhang et al. (2025) "In-Sample R2 Is Not a Valid Separability Metric for ET Feature Extraction."')

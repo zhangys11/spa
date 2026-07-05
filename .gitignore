@@ -8,3 +8,4 @@ spa/gui/*.csv
 spa-ds-*
 /dist
 **/.ipynb_checkpoints
+.DS_Store

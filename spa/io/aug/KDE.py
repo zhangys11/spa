@@ -28,7 +28,7 @@ def expand_dataset(X,y,nobs,bandwidth=100):
             y_sam=[]
             for m in range(nobs):
                 random_var = np.random.choice(x, size=1, p=p)
-                y_sam.append(float(random_var))
+                y_sam.append(float(random_var[0]))
             data_sam.append(y_sam)
         KDE_sam=pd.DataFrame(data_sam).T
         KDE_sam.columns=X.columns

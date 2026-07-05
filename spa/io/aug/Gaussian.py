@@ -15,7 +15,7 @@ def expand_dataset(X,y,nobs):
             y_sam=[]
             for m in range(nobs):
                 random_var=np.random.normal(mean, std, 1)
-                y_sam.append(float(random_var))
+                y_sam.append(float(random_var[0]))
             data_sam.append(y_sam)
         Gaussian_sam=pd.DataFrame(data_sam).T
         Gaussian_sam.columns=X.columns
