@@ -1,13 +1,27 @@
 NIR spectra of diesel fuels (Southwest Research Institute, SWRI)
 
-381 samples (with a valid target), 401 spectral variables
-(wavelengths 750-1550 nm, 2 nm step).
-The 'label' column is the Cetane Number (CN), a regression target.
+784 spectra, 401 spectral variables (wavelengths 750-1550 nm, 2 nm step).
 
-The source .mat file (PLS_Toolbox DataSet) also contains other
-properties: BP50, D4052, FLASH, FREEZE, TOTAL (total aromatics), VISC.
+This is a multi-target dataset. Use the `target=` argument of
+load_dataset()/open_dataset() to choose the y column(s), e.g.
+    io.load_dataset('diesel_nir')                       # default -> CN
+    io.load_dataset('diesel_nir', target='FREEZE')
+    io.load_dataset('diesel_nir', target=['CN','FREEZE'])
+    io.load_dataset('diesel_nir', target='all')
+A single target returns a 1-D y; multiple targets return a 2-D y.
+Samples whose selected target(s) were not measured (NaN) are dropped,
+so the sample count depends on the chosen target(s).
 
-Task: regression (cetane number).
+Targets (all continuous regression properties):
+    CN     - Cetane Number (default), n=381, range 36.9 ~ 61.3
+    BP50   - Boiling point at 50% recovery, n=395, range 182 ~ 297
+    D4052  - Density by ASTM D4052 (g/mL), n=395, range 0.78 ~ 0.87
+    FLASH  - Flash point, n=395, range 23 ~ 96
+    FREEZE - Freeze point, n=395, range -59.5 ~ 6.6
+    TOTAL  - Total aromatics (%), n=395, range 8.3 ~ 47.2
+    VISC   - Viscosity, n=395, range 1.12 ~ 4.05
+
+Task: regression.
 
 Source:
 

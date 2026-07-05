@@ -1,8 +1,19 @@
-FTIR spectra of olive oil samples (4 classes)
+FTIR spectra of extra-virgin olive oils by geographic origin (4 classes)
 
 120 samples, 570 spectral variables, 4 classes (labels 0-3).
+Classes correspond to the country of origin. The mapping used here is:
+0=Greece, 1=Italy, 2=Portugal, 3=Spain (label order not verifiable
+from the source file).
 
 The original spectral axis (wavenumbers) was not provided with the
 source data, so feature columns are indexed sequentially (0..569).
 
 Task: classification.
+
+Related publication:
+
+    Tapp, H.S., Defernez, M., Kemsley, E.K. (2003).
+    FTIR spectroscopy and multivariate analysis can distinguish the
+    geographic origin of extra virgin olive oils. J. Agric. Food Chem.
+    https://doi.org/10.1021/jf021056m
+

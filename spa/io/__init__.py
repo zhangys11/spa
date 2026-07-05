@@ -75,7 +75,7 @@ DATASET_MAP = {'s4_formula': ('7341_C1.csv', ',', False, '7341_C1 desc.txt', ['S
                'rice_starch': ('rice_starch.CSV', ',', True, 'rice_starch desc.txt', [], 800),  
                'grapevine_nir': ('vergalijo_20_varieties.csv', ',', True, 'vergalijo_20_varieties desc.txt', ["Albariño", "Cabernet Franc", "Cabernet Sauvignon", "Caladoc", "Carmenere", "Godello", "Grenache", "Malvasia", "Marselan", "Pedro Ximénez", "Pinot Noir", "Syrah", "Tempranillo", "Touriga Nacional", "Treixadura", "Verdejo", "Viognier", "Viura", "White Grenache", "White Tempranillo"], .2),  
                'milk_coconut_nir': ('milk_coconut_powder.csv', ',', True, 'milk_coconut_powder desc.txt', ["0", "0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "1"], .2),  
-               'olive_oil_ftir': ('olive_oil_ftir.csv', ',', True, 'olive_oil_ftir desc.txt', ["Class 0", "Class 1", "Class 2", "Class 3"], .2),  
+               'olive_oil_ftir': ('olive_oil_ftir.csv', ',', True, 'olive_oil_ftir desc.txt', ["Greece", "Italy", "Portugal", "Spain"], .2),  
                'mango_nir': ('mango_nir.csv', ',', True, 'mango_nir desc.txt', [], .2),  
                'diesel_nir': ('diesel_nir.csv', ',', True, 'diesel_nir desc.txt', [], .2),  
                'wheat_glutten_seed_vis': ('wheat_glutten.xls,0,4', ',', True, 'wheat_glutten desc.txt', [], 800),
@@ -102,7 +102,7 @@ def id_to_fullpath(id):
     path = id_to_path(id)[0]
     return DATA_FOLDER + path
 
-def load_dataset(id, SD=1, shift=None, x_range=None, y_subset=None, display=True):
+def load_dataset(id, SD=1, shift=None, x_range=None, y_subset=None, display=True, target=None):
     '''
     Load a built-in dataset.
 
@@ -110,10 +110,18 @@ def load_dataset(id, SD=1, shift=None, x_range=None, y_subset=None, display=True
     ----------
     x_range : e.g., list(range(0,500))
     y_subset : e.g., [0,3]
+    target : None | int | str | list of int|str | 'all'
+        For multi-target datasets (e.g. 'diesel_nir' with CN/BP50/D4052/FLASH/
+        FREEZE/TOTAL/VISC; 'mango_nir' with DM/Cultivar/Type/Region/Season/Temp),
+        selects which target column(s) to return as y. A single selection returns
+        a 1-D y (backward compatible); multiple selections return a 2-D y of
+        shape (n_samples, n_targets). Accepts positional ints ([0,1,2]),
+        names (['BP50','CN']) or 'all'. Defaults to the first target column.
 
     Examples
     --------
     X, y, X_names, _, labels = io.load_dataset('milk_tablet_candy')
+    X, y, X_names, _, _ = io.load_dataset('diesel_nir', target=['CN','FREEZE'])
     '''
 
     path, delimiter, has_y, path_desc, labels, default_shift = id_to_path(id)
@@ -123,10 +131,10 @@ def load_dataset(id, SD=1, shift=None, x_range=None, y_subset=None, display=True
         if shift is None:
             shift = default_shift
         X, y, X_names, labels = peek_dataset(
-            DATA_FOLDER + path, delimiter, has_y, labels, SD, shift, x_range, y_subset)
+            DATA_FOLDER + path, delimiter, has_y, labels, SD, shift, x_range, y_subset, target)
     else:
         X, y, X_names, labels = open_dataset(
-            DATA_FOLDER + path, delimiter, has_y, labels, x_range, y_subset)
+            DATA_FOLDER + path, delimiter, has_y, labels, x_range, y_subset, target)
 
     if os.path.exists(DATA_FOLDER + path_desc):
         f = open(DATA_FOLDER + path_desc, "r", encoding='UTF-8')
@@ -152,12 +160,67 @@ def _safe_float_convert(columns):
     return result
 
 
-def open_dataset(path, delimiter=',', has_y=True, labels=None, x_range=None, y_subset=None):
+def _is_float(x):
+    """Return True if x can be converted to a float."""
+    try:
+        float(x)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def _resolve_targets(target_cols, target):
+    '''
+    Resolve the `target` selector into an ordered list of target column names.
+
+    Parameters
+    ----------
+    target_cols : list of the available target column names (non-spectral,
+        non-tag leading columns), in file order.
+    target : None | int | str | list/tuple of int|str | 'all'
+        - None (default): the first target column (backward compatible).
+        - int : positional index into target_cols.
+        - str : a target column name (case-insensitive), or 'all'.
+        - list/tuple : any mix of the above (ints and/or names).
+
+    Returns
+    -------
+    list of the selected target column names.
+    '''
+    lower_map = {str(c).strip().lower(): c for c in target_cols}
+
+    def _one(t):
+        if isinstance(t, (int, np.integer)) and not isinstance(t, bool):
+            return target_cols[int(t)]
+        key = str(t).strip().lower()
+        if key not in lower_map:
+            raise ValueError(
+                "Unknown target '%s'. Available targets: %s" % (t, target_cols))
+        return lower_map[key]
+
+    if target is None:
+        return [target_cols[0]]
+    if isinstance(target, str) and target.strip().lower() == 'all':
+        return list(target_cols)
+    if isinstance(target, (list, tuple)):
+        return [_one(t) for t in target]
+    return [_one(target)]
+
+
+def open_dataset(path, delimiter=',', has_y=True, labels=None, x_range=None, y_subset=None, target=None):
     '''
     Parameters
     ----------
     path : if the file extension is pkl, will use pickle.load(), otherwise use pandas.read_csv()
     has_y : boolean, whether there is y column, usually the 1st column.
+    target : None | int | str | list of int|str | 'all'
+        Selects which target column(s) to return as y for multi-target
+        datasets (e.g. diesel_nir has CN/BP50/...; mango_nir has DM/Cultivar/...).
+        Target columns are the leading non-spectral columns (headers that are
+        not numeric), excluding a 'Tag' column. When a single target is
+        selected, y is a 1-D array (backward compatible); when multiple targets
+        are selected, y is a 2-D array of shape (n_samples, n_targets).
+        Defaults to the first target column.
     x_range : [250,2000] or None. If none, all features are kept.
     '''
 
@@ -220,39 +283,55 @@ def open_dataset(path, delimiter=',', has_y=True, labels=None, x_range=None, y_s
         data = pd.read_csv(path, delimiter=delimiter)  # ,header=None
         # print('Total NAN: ', data.isnull().sum().sum(), '\n\n', data.isnull().sum().values)
 
-        cols = data.shape[1]
+        headers = list(data.columns.values)
 
-        # judge whether there is a Tag column (case-insensitive, strip whitespace)
-        col_names = [str(c).strip().lower() for c in data.columns.values]
-        has_tag = 1 if 'tag' in col_names else 0
+        # spectral columns start at the first numeric (float-convertible) header;
+        # leading non-numeric headers are metadata (target columns and a 'Tag' column)
+        x_start = 0
+        while x_start < len(headers) and not _is_float(headers[x_start]):
+            x_start += 1
+
+        meta = headers[:x_start]
+        target_cols = [c for c in meta if str(c).strip().lower() != 'tag']
 
         if has_y:
 
             # convert from pandas dataframe to numpy matrices
-            X = data.iloc[:, has_tag + 1:].values  # .values[:,::10]
-            y = data.iloc[:, 0].values.ravel()  # first col is y label
-            if all(isinstance(s, str) for s in y):
-                labels = np.unique(y)
-                y = np.array([np.where(labels == v)[0][0] for v in y])
-                print('remap string labels to int', labels, '-->', np.unique(y))
-            # use map(float, ) to convert the string list to float list
-            # list(map(float, data.columns.values[1:])) # X_names = np.array(list(data)[1:])
-            X_names = list(map(float, data.columns.values[has_tag + 1:]))
+            X = data.iloc[:, x_start:].values
+            X_names = list(map(float, headers[x_start:]))
+
+            selected = _resolve_targets(target_cols, target)
+            yv = data[selected].values  # (n_samples, n_selected)
+
+            # drop samples whose selected numeric target(s) are NaN (not measured)
+            if yv.dtype.kind == 'f':
+                mask = ~np.isnan(yv).any(axis=1)
+                if not mask.all():
+                    print('drop', int((~mask).sum()), 'sample(s) with NaN target(s)')
+                    X = X[mask]
+                    yv = yv[mask]
+
+            if len(selected) == 1:
+                y = yv[:, 0].ravel()  # single target -> 1-D
+                if all(isinstance(s, str) for s in y):
+                    labels = np.unique(y)
+                    y = np.array([np.where(labels == v)[0][0] for v in y])
+                    print('remap string labels to int', labels, '-->', np.unique(y))
+            else:
+                y = yv  # multiple targets -> 2-D (n_samples, n_targets)
+                print('selected targets', selected)
 
         else:
 
-            X = data.iloc[:, has_tag:].values
+            X = data.iloc[:, x_start:].values
             y = None
-
-            # use map(float, ) to convert the string list to float list
-            # X_names = np.array(list(data)[1:])
-            X_names = list(map(float, data.columns.values[has_tag:]))
+            X_names = list(map(float, headers[x_start:]))
 
     if x_range is not None:
         X = X[:, x_range]
         X_names = np.array(X_names)[x_range].tolist()
 
-    if has_y and y_subset is not None:
+    if has_y and y_subset is not None and y is not None and np.ndim(y) == 1:
         Xs = []
         ys = []
 
@@ -508,19 +587,24 @@ def draw_class_average_3d(X, y, X_names, labels=None, view_point = (30,-50)):
 
     matplotlib.rcParams.update({'font.size': 10, 'font.family': 'sans-serif', 'figure.dpi': 100})
 
-def peek_dataset(path,  delimiter=',', has_y=True, labels=None, SD=1, shift=200, x_range=None, y_subset=None):
+def peek_dataset(path,  delimiter=',', has_y=True, labels=None, SD=1, shift=200, x_range=None, y_subset=None, target=None):
 
     X, y, X_names, labels = open_dataset(
-        path, delimiter=delimiter, has_y=has_y, labels=labels, x_range=x_range, y_subset=y_subset)
+        path, delimiter=delimiter, has_y=has_y, labels=labels, x_range=x_range, y_subset=y_subset, target=target)
+
+    # for multi-target (2-D y) or continuous/regression y, per-class plotting is
+    # not meaningful, so fall back to the class-agnostic average plot
+    is_class_y = y is not None and np.ndim(y) == 1 and (
+        y.dtype.kind in 'iu' or (labels is not None and len(labels) > 0))
 
     if len(X.shape) == 2:
 
-        if y is None:
+        if y is None or not is_class_y:
             draw_average(X, X_names)
+            _ = scatter_plot(X, None, labels=labels)
         else:
             draw_class_average(X, y, X_names, labels, SD, shift)
-
-        _ = scatter_plot(X, y, labels=labels)
+            _ = scatter_plot(X, y, labels=labels)
 
     elif len(X.shape) == 3:  # multi-channel data, e.g., enose/etongue
 

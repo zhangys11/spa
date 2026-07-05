@@ -1,12 +1,33 @@
-NIR spectra for mango dry matter content (DMC) prediction
+NIR spectra for mango fruit quality (DMC and cultivar/type/origin)
 
 12011 samples, 306 spectral variables (wavelengths 285-1200 nm, 3 nm step).
-The 'label' column is the dry matter content (DM, %), a regression target.
-An additional 'Tag' column holds the mango cultivar.
+Note: to keep the package under PyPI's size limit, the reflectance values
+have been rounded to 4 decimal places and DM to 3 decimal places.
 
-Task: regression (dry matter content).
+This is a multi-target dataset. Use the `target=` argument of
+load_dataset()/open_dataset() to choose the y column(s), e.g.
+    io.load_dataset('mango_nir')                        # default -> DM
+    io.load_dataset('mango_nir', target='Cultivar')
+    io.load_dataset('mango_nir', target=['DM','Cultivar','Type'])
+    io.load_dataset('mango_nir', target='all')
+A single target returns a 1-D y; multiple targets return a 2-D y.
+String targets (Cultivar/Type/Region/Temp) are remapped to integer class
+indices when selected alone.
+
+Targets:
+    DM       - Dry matter content (%), regression (default), range 9.46 ~ 24.58
+    Cultivar - Mango cultivar, 10-class classification
+               (Caly, KP, HG, Keitt, R2E2, 1243, LadyG, 1201, 4069, LadyJ)
+    Type     - Ripeness, binary classification (Hard Green / Ripen)
+    Region   - Growing region, binary classification (NT / QLD)
+    Season   - Harvest season, 5 levels (1..5)
+    Temp     - Storage temperature group (Low / Mid / High / No)
+
+Task: regression (dry matter content) and/or classification.
 
 Original publication:
 
-    Anderson, N.T., Walsh, K.B., et al.
+    Anderson, N.T., Walsh, K.B., et al. (2020).
+    Achieving robustness across season, location and cultivar for a NIRS
+    model for intact mango fruit dry matter content.
     https://doi.org/10.1016/j.postharvbio.2020.111202
