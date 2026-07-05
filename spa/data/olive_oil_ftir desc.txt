@@ -1,0 +1,8 @@
+FTIR spectra of olive oil samples (4 classes)
+
+120 samples, 570 spectral variables, 4 classes (labels 0-3).
+
+The original spectral axis (wavenumbers) was not provided with the
+source data, so feature columns are indexed sequentially (0..569).
+
+Task: classification.

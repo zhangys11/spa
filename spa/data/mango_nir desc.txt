@@ -1,0 +1,12 @@
+NIR spectra for mango dry matter content (DMC) prediction
+
+12011 samples, 306 spectral variables (wavelengths 285-1200 nm, 3 nm step).
+The 'label' column is the dry matter content (DM, %), a regression target.
+An additional 'Tag' column holds the mango cultivar.
+
+Task: regression (dry matter content).
+
+Original publication:
+
+    Anderson, N.T., Walsh, K.B., et al.
+    https://doi.org/10.1016/j.postharvbio.2020.111202

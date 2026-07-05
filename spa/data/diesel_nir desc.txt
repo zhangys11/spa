@@ -1,0 +1,14 @@
+NIR spectra of diesel fuels (Southwest Research Institute, SWRI)
+
+381 samples (with a valid target), 401 spectral variables
+(wavelengths 750-1550 nm, 2 nm step).
+The 'label' column is the Cetane Number (CN), a regression target.
+
+The source .mat file (PLS_Toolbox DataSet) also contains other
+properties: BP50, D4052, FLASH, FREEZE, TOTAL (total aromatics), VISC.
+
+Task: regression (cetane number).
+
+Source:
+
+    https://eigenvector.com/resources/data-sets/
