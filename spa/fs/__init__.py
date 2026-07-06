@@ -211,45 +211,76 @@ def alasso_fs(X, y, X_names=None, N=30, LAMBDA=0.1, flavor=2,
 
 def glasso_fs(X, y, X_names=None, N=30, WIDTH=8, ALPHA=0.5, LAMBDA=0.1, display=True, verbose=True):
     '''
-    Group lasso
+    Group lasso feature selection with contiguous spectral windows as groups.
+
+    Adjacent wavenumbers/wavelengths are grouped into non-overlapping windows of
+    size ``WIDTH`` and a sparse-group-lasso (LogisticGroupLasso) model selects
+    entire windows, yielding chemically contiguous, interpretable spectral bands.
 
     Parameters
     ----------
-    WIDTH : window size
-    ALPHA : adjust L1 and L2 ratio
-    LAMBDA : controls regularization / sparsity. The effect may vary for different flavors.
+    WIDTH : window (group) size
+    ALPHA : L1 vs group ratio in [0, 1]. l1_reg = ALPHA*LAMBDA, group_reg = (1-ALPHA)*LAMBDA.
+    LAMBDA : overall regularization / sparsity strength.
     '''
 
-    THETAS = group_lasso(X, y, WIDTH=WIDTH, LAMBDA=LAMBDA, ALPHA=ALPHA)
+    n = X.shape[1]
+    # contiguous windows of size WIDTH as group ids: [0,0,..,1,1,..,2,...]
+    groups = np.repeat(np.arange(int(np.ceil(n / WIDTH))), WIDTH)[:n]
 
-    NZ = np.count_nonzero(THETAS)
+    coef, mask, acc, aic, bic, aicc = group_lasso(
+        X, y, groups=groups,
+        group_reg=(1.0 - ALPHA) * LAMBDA, l1_reg=ALPHA * LAMBDA,
+        verbose=verbose)
+
+    fi = np.abs(np.asarray(coef))
+    if fi.ndim == 2:               # (n_features, n_classes) -> per-feature importance
+        fi = fi.sum(axis=1)
+
+    NZ = int(np.count_nonzero(fi))
     if verbose:
-        print('Non-zero feature coefficients:', NZ)
+        print('Non-zero feature coefficients:', NZ, '| test accuracy:', round(acc, 3))
 
     if N is None or N <= 0 or N > NZ:
-        N = NZ
+        N = max(NZ, 1)
 
-    return __fs__(X, np.abs(THETAS), X_names, N, display)
+    return __fs__(X, fi, X_names, N, display)
 
 
 def glasso_cv_fs(X, y, X_names=None, N=30, N2=None,
                  WIDTHS=[2, 8, 32], LAMBDAS=[0.01, 0.1, 1], ALPHAS=[0, 0.5, 1]):
     '''
+    Group lasso feature selection with grid search over (WIDTH, LAMBDA, ALPHA).
+
+    For each hyper-parameter combination a windowed group lasso is fitted and the
+    top-N features are scored by a LogisticRegressionCV on a held-out split; the
+    best-scoring configuration is returned.
+
     Parameters
     ----------
-    N1 : tier-1 (glasso fs) features to be kept. 
-    N2 : tier-2 (select common features from multiple runs) features to be kept.
+    N : tier-1 features to keep for each configuration.
+    N2 : kept for backward compatibility (unused; the best single run is returned).
     '''
-    HPARAMS, FSIS, THETAS, SCORES = group_lasso_cv(X, y, MAXF=N,
-                                                   WIDTHS=WIDTHS, LAMBDAS=LAMBDAS, ALPHAS=ALPHAS, cv_size=0.2)
-    if N2 is None:
-        N2 = N
-    COMMON_FSI = select_features_from_group_lasso_cv(
-        HPARAMS, FSIS, THETAS, SCORES, MAXF=N2, THRESH=1.0)
-    # no common important features are selected
-    if COMMON_FSI is None or len(COMMON_FSI) <= 0:
+    from sklearn.model_selection import train_test_split as _tts
+    best = (-np.inf, None)
+    for w in WIDTHS:
+        for lam in LAMBDAS:
+            for alpha in ALPHAS:
+                try:
+                    X_s, idx, _ = glasso_fs(X, y, X_names=X_names, N=N, WIDTH=w,
+                                            ALPHA=alpha, LAMBDA=lam,
+                                            display=False, verbose=False)
+                except Exception:
+                    continue
+                if X_s is None or X_s.shape[1] == 0:
+                    continue
+                Xtr, Xte, ytr, yte = _tts(X_s, y, test_size=0.2, stratify=y, random_state=0)
+                score = LogisticRegressionCV(max_iter=1000).fit(Xtr, ytr).score(Xte, yte)
+                if score > best[0]:
+                    best = (score, idx)
+    if best[1] is None:
         return None, None, None
-    return X[:, COMMON_FSI], COMMON_FSI, None
+    return X[:, best[1]], best[1], None
 
 
 '''

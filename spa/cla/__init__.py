@@ -29,7 +29,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
 from xgboost import XGBClassifier
 from sklearn.svm import LinearSVC, SVC
-from sklearn.model_selection import train_test_split, GridSearchCV, KFold
+from sklearn.model_selection import train_test_split, GridSearchCV, KFold, StratifiedKFold
 # from pyNNRW.elm import ELMClassifier
 # from pyNNRW.rvfl import RVFLClassifier
 from ..io.pre import stratified_kennardstone_split
@@ -69,7 +69,11 @@ def run_multiclass_clfs_presplit(X_train, y_train, X_test = None, y_test = None,
     dic_test_f1s = {}
 
     html_str = ''
-    kfold = KFold(n_splits=min(3,len(y_train)), shuffle=True, random_state=cv_seed)
+    # stratified CV keeps every class present in each fold; n_splits is capped by
+    # the smallest class so it never exceeds the available per-class samples.
+    min_class = int(np.min(np.bincount(np.asarray(y_train).astype(int)))) if np.issubdtype(np.asarray(y_train).dtype, np.integer) else 3
+    n_splits = max(2, min(3, min_class))
+    kfold = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=cv_seed)
     for base_learner, param_grid in zip( [GaussianNB(), DecisionTreeClassifier(), 
                 RandomForestClassifier(), AdaBoostClassifier(), GradientBoostingClassifier(), XGBClassifier(),
                 LinearSVC(multi_class="crammer_singer"), SVC(kernel='rbf'),
@@ -95,7 +99,7 @@ def run_multiclass_clfs_presplit(X_train, y_train, X_test = None, y_test = None,
         if clfs != 'all' and str(base_learner) not in clfs:
             continue
 
-        gs = GridSearchCV(base_learner, param_grid, cv= kfold, n_jobs=1, verbose=0)
+        gs = GridSearchCV(base_learner, param_grid, cv= kfold, n_jobs=-1, verbose=0)
         gs.fit(X_train, y_train)
 
         clf = gs.best_estimator_

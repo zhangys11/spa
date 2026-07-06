@@ -245,7 +245,12 @@ def run_regressors(X_train, X_val, X_test, y_train, y_val, y_test,
             # Partial Least Squares Regression
             from sklearn.cross_decomposition import PLSRegression
 
-            hparams = list(range(1, X_train.shape[1])) # Number of components to keep. Should be in [1, n_features]
+            # Number of components to keep must be in [1, min(n_samples, n_features)].
+            # Cap the search at 30 components: for spectroscopic data (p up to
+            # thousands) searching up to n_features is prohibitively slow and the
+            # optimum is reached with far fewer latent variables.
+            max_nc = int(min(X_train.shape[1], X_train.shape[0] - 1, 30))
+            hparams = list(range(1, max(2, max_nc + 1)))
             val_scores = []
             for nc in hparams:
                 plsr = PLSRegression(n_components=nc).fit(X_train, y_train)
