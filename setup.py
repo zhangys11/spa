@@ -1,12 +1,23 @@
 # from distutils.core import setup
 from setuptools import setup
+import os, glob
+
+# Datasets larger than this threshold are NOT shipped inside the wheel (to keep
+# it under PyPI's size limit); they remain in the Git repository and are fetched
+# on first use by spa.io.resolve_data_file() and cached locally. Small datasets
+# stay bundled so common examples work fully offline.
+_LARGE_FILE_THRESHOLD = 2 * 1024 * 1024
+_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'spa', 'data')
+_EXTERNAL_DATA = sorted(
+    os.path.basename(p) for p in glob.glob(os.path.join(_DATA_DIR, '*'))
+    if os.path.isfile(p) and os.path.getsize(p) > _LARGE_FILE_THRESHOLD)
 
 setup(
     # Application name:
     name="spa-ds",
 
     # Version number:
-    version="2.0.7",
+    version="2.0.8",
 
     # Application author details:
     author="Yinsheng Zhang (Ph.D.)",
@@ -59,7 +70,10 @@ setup(
 
     package_data={
         "": ["*.txt", "*.csv", "*.png", "*.jpg", "*.json"],
-    }
+    },
+
+    # keep large datasets out of the wheel (downloaded on first use, see above)
+    exclude_package_data={"spa.data": _EXTERNAL_DATA},
 )
 
 # To Build and Publish (for developer only),

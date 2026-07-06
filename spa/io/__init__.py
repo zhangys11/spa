@@ -15,6 +15,55 @@ from ..vis.plt2base64 import plt2html
 DATA_FOLDER = os.path.dirname(os.path.dirname(
     os.path.realpath(__file__))) + "/data/"
 
+# Large datasets are not shipped inside the wheel to keep it small; they are
+# downloaded on first use from the GitHub repository and cached locally.
+DATA_BASE_URL = os.environ.get(
+    'SPA_DATA_URL', 'https://raw.githubusercontent.com/zhangys11/spa/main/spa/data/')
+CACHE_FOLDER = os.environ.get(
+    'SPA_DATA_CACHE', os.path.join(os.path.expanduser('~'), '.spa_ds', 'data'))
+
+
+def _ci_lookup(folder, filename):
+    '''Return the actual path of `filename` in `folder`, matching case-insensitively.'''
+    p = os.path.join(folder, filename)
+    if os.path.exists(p):
+        return p
+    if os.path.isdir(folder):
+        low = filename.lower()
+        for f in os.listdir(folder):
+            if f.lower() == low:
+                return os.path.join(folder, f)
+    return None
+
+
+def resolve_data_file(filename, download=True):
+    '''
+    Resolve a built-in dataset file name to a local path.
+
+    Resolution order (all case-insensitive): (1) the bundled ``data`` folder,
+    (2) the local cache folder, (3) download from ``DATA_BASE_URL`` into the
+    cache. This lets large datasets be excluded from the wheel yet still load
+    transparently. Returns ``DATA_FOLDER + filename`` if resolution fails and
+    ``download`` is False.
+    '''
+    hit = _ci_lookup(DATA_FOLDER, filename)
+    if hit:
+        return hit
+    hit = _ci_lookup(CACHE_FOLDER, filename)
+    if hit:
+        return hit
+    if not download:
+        return DATA_FOLDER + filename
+    import urllib.request
+    import urllib.parse
+    os.makedirs(CACHE_FOLDER, exist_ok=True)
+    dst = os.path.join(CACHE_FOLDER, filename)
+    url = DATA_BASE_URL + urllib.parse.quote(filename)
+    print('Downloading dataset file (first use): %s\n  from %s' % (filename, url))
+    urllib.request.urlretrieve(url, dst)
+    return dst
+
+
 matplotlib.rcParams['font.sans-serif'] = [
     'Arial Unicode MS',       # macOS
     'Heiti SC', 'PingFang SC', # macOS Chinese
@@ -38,10 +87,10 @@ DATASET_MAP = {'s4_formula': ('7341_C1.csv', ',', False, '7341_C1 desc.txt', ['S
                'vintage_spi': ('7345.csv', ',', True, '7345 desc.txt', ["5Y", "8Y", "16Y", "26Y"], 200),
                'vintage_526': ('vintage_7344_Y5Y26.csv', ',', True, 'vintage_7344_Y5Y26 desc.txt', ["5Y", "26Y"], 2000),
                'beimu': ('754a_C2S_Beimu.txt', ',', True, '754a_C2S_Beimu desc.txt', ["Sichuan", "Zhejiang"], 300),
-               'beimu_c4': ('Beimu_C4.csv', ',', True, 'Beimu_C4 desc.txt', ["炉贝", "青贝", "松贝", "太白贝母"], 300),
+               'beimu_c4': ('beimu_C4.CSV', ',', True, 'beimu_C4 desc.txt', ["炉贝", "青贝", "松贝", "太白贝母"], 300),
                'shihu_c2': ('754b_C2S_Shihu.csv', ',', True, '754b_C2S_Shihu desc.txt', ['Yunnan', 'Zhejiang'], 500),
                #'shihu': ('754b.csv',',',True,'754b desc.txt',['Yunnan','Wenzhou','Panan1','Panan2']),
-               'shihu_c3': ('Shihu3.csv', ',', True, 'Shihu3 desc.txt', ["Pan'an", 'Wenzhou', 'Yunnan'], 800),
+               'shihu_c3': ('shihu3.CSV', ',', True, 'shihu3 desc.txt', ["Pan'an", 'Wenzhou', 'Yunnan'], 800),
                'huangqi_rm': ('7044X_RAMAN.csv', ',', True, '7044X_RAMAN desc.txt', ['Inner Mongolia', 'Sichuan', 'Shanxi', 'Gansu'], 3000),
                'huangqi_uv': ('7143X_UV.csv', ',', True, '7143X_UV desc.txt', ['Inner Mongolia', 'Sichuan', 'Shanxi', 'Gansu'], 2),
                'huangqi_ims': ('704b_IMS.csv', ',', True, '704b_IMS desc.txt', ['Inner Mongolia', 'Sichuan', 'Shanxi', 'Gansu'], 5),
@@ -51,7 +100,7 @@ DATASET_MAP = {'s4_formula': ('7341_C1.csv', ',', False, '7341_C1 desc.txt', ['S
                'chaihu_rm': ('7a41.csv', ',', True, '7a41 desc.txt', ['Neimeng Wild', 'Neimeng Cultivated', 'Neimeng Black Bupleurum', 'Gansu', 'Shanxi', 'vinegar Concocted', 'Saikosaponin'], 1500),
                'chaihu_hplc': ('7a41_hplc.xlsx', 'n/a', True, '7a41_hplc desc.txt', [ 'Shanxi', 'Gansu', 'Neimeng Wild', 'Neimeng Cultivated', 'Neimeng Black Bupleurum', 'Saikosaponin 5ppm', 'Saikosaponin 10ppm', 'Saikosaponin 20ppm', 'Saikosaponin 40ppm'], 1),
                'chaihu_ms': ('7b43.csv', ',', True, '7b43 desc.txt', ["wild", "cultivated"], 200),
-               'baiji': ('baiji_C3.csv', ',', True, 'baiji_C3 desc.txt', ['四川', '云南','浙江'], 800),
+               'baiji': ('Baiji_C3.CSV', ',', True, 'baiji_C3 desc.txt', ['四川', '云南','浙江'], 800),
                'rice_cereal': ('7741_P.csv', ',', True, '7741_rice_cereal_rm desc.txt', ['LF', 'EB'], 3000),
                'organic_milk': ('7047_S.txt', ',', True, 'MALDITOFMS_ORGANICMILK_7047_C02 desc.txt', ['non-organic', 'organic'], 1000),
                'organic_milk_c3': ('7047_P.txt', ',', True, 'MALDITOFMS_ORGANICMILK_7047 desc.txt', ['non-organic', 'low-fat', 'organic'], 1000),
@@ -66,13 +115,13 @@ DATASET_MAP = {'s4_formula': ('7341_C1.csv', ',', False, '7341_C1 desc.txt', ['S
                'salt': ('7545.csv', ',', True, '7545 desc.txt', ["well salt", "sea salt"], 200),
                'mouse_omics': ('metabolomics.txt', '\t', True, 'metabolomics desc.txt', ["control", "experiment"], 50000000),
                'ovarian_cancer_ms': ('ovarian-cancer-nci-pbsii-data.csv', ',', True, 'ovarian cacner desc.txt', ["normal", "cancer"], 1),
-               'milk_source': ('milk_source_raman_C6.csv', ',', True, 'milk_source_raman_C6 desc.txt', ["Baffalo", "Cattle", "Goat", "Yak", "Cattle2", "Camel"], 2000),               
+               'milk_source': ('milk_source_raman_C6.CSV', ',', True, 'milk_source_raman_C6 desc.txt', ["Baffalo", "Cattle", "Goat", "Yak", "Cattle2", "Camel"], 2000),               
                'yogurt_source': ('yogurt_raman_C4.csv', ',', True, 'yogurt_raman_C4 desc.txt', ["Cattle", "Goat", "Yak", "Buffalo"], 2000),               
                'raspberry': ('raspberry.csv', ',', True, 'raspberry desc.txt', ["安徽", "安吉", "淳安", "磐安", "武义"], 2000),
                'milk_adulteration': ('adulteration.CSV', ',', True, 'adulteration desc.txt', ["0", "0.01", "0.02", "0.05", "0.1", "0.2", "0.4", "0.6", "0.8", "1"], 800),       
                'yogurt_fermentation_a': ('yogurt_tsa_A.CSV', ',', True, 'yogurt_tsa desc.txt', ["0h", "3h", "6h", "9h", "12h", "15h", "18h", "21h", "24h"], 400),
                'yogurt_fermentation_b': ('yogurt_tsa_B.CSV', ',', True, 'yogurt_tsa desc.txt', ["0h", "3h", "6h", "9h", "12h", "15h", "18h", "21h", "24h"], 400),
-               'rice_starch': ('rice_starch.CSV', ',', True, 'rice_starch desc.txt', [], 800),  
+               'rice_starch': ('rice_starch.csv', ',', True, 'rice_starch desc.txt', [], 800),  
                'grapevine_nir': ('vergalijo_20_varieties.csv', ',', True, 'vergalijo_20_varieties desc.txt', ["Albariño", "Cabernet Franc", "Cabernet Sauvignon", "Caladoc", "Carmenere", "Godello", "Grenache", "Malvasia", "Marselan", "Pedro Ximénez", "Pinot Noir", "Syrah", "Tempranillo", "Touriga Nacional", "Treixadura", "Verdejo", "Viognier", "Viura", "White Grenache", "White Tempranillo"], .2),  
                'milk_coconut_nir': ('milk_coconut_powder.csv', ',', True, 'milk_coconut_powder desc.txt', ["0", "0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "1"], .2),  
                'olive_oil_ftir': ('olive_oil_ftir.csv', ',', True, 'olive_oil_ftir desc.txt', ["Greece", "Italy", "Portugal", "Spain"], .2),  
@@ -100,7 +149,7 @@ def id_to_path(id):
 
 def id_to_fullpath(id):
     path = id_to_path(id)[0]
-    return DATA_FOLDER + path
+    return resolve_data_file(path.split(',', 1)[0])
 
 def load_dataset(id, SD=1, shift=None, x_range=None, y_subset=None, display=True, target=None):
     '''
@@ -127,17 +176,26 @@ def load_dataset(id, SD=1, shift=None, x_range=None, y_subset=None, display=True
     path, delimiter, has_y, path_desc, labels, default_shift = id_to_path(id)
     print('load dataset from', path)
 
+    # resolve to an actual local path (bundled / cached / downloaded), preserving
+    # any ',sheet,...' suffix used for multi-sheet spreadsheets
+    if ',' in path and path.split(',', 1)[0].lower().endswith(('.xls', '.xlsx')):
+        base, rest = path.split(',', 1)
+        full_path = resolve_data_file(base) + ',' + rest
+    else:
+        full_path = resolve_data_file(path)
+
     if display:
         if shift is None:
             shift = default_shift
         X, y, X_names, labels = peek_dataset(
-            DATA_FOLDER + path, delimiter, has_y, labels, SD, shift, x_range, y_subset, target)
+            full_path, delimiter, has_y, labels, SD, shift, x_range, y_subset, target)
     else:
         X, y, X_names, labels = open_dataset(
-            DATA_FOLDER + path, delimiter, has_y, labels, x_range, y_subset, target)
+            full_path, delimiter, has_y, labels, x_range, y_subset, target)
 
-    if os.path.exists(DATA_FOLDER + path_desc):
-        f = open(DATA_FOLDER + path_desc, "r", encoding='UTF-8')
+    desc_path = _ci_lookup(DATA_FOLDER, path_desc) or _ci_lookup(CACHE_FOLDER, path_desc)
+    if desc_path and os.path.exists(desc_path):
+        f = open(desc_path, "r", encoding='UTF-8')
         desc = f.read()
         f.close()
         
@@ -260,22 +318,26 @@ def open_dataset(path, delimiter=',', has_y=True, labels=None, x_range=None, y_s
         y_data = [sheet_Y.row_values(r) for r in range(1, sheet_Y.nrows)]
         y = pd.DataFrame(y_data).iloc[:,-1].values
     
-    elif ext == '.pkl':
+    elif ext == '.pkl' or ext == '.npz':
 
-        with open(path, 'rb') as f:
+        if ext == '.npz':
+            npz = np.load(path, allow_pickle=True)
+            ds = {k: npz[k] for k in npz.files}
+        else:
+            with open(path, 'rb') as f:
+                ds = pickle.load(f)
 
-            ds = pickle.load(f)
-            X = ds['X']
+        X = ds['X']
 
-            if has_y:
-                y = ds['y']
-            else:
-                y = None
+        if has_y:
+            y = ds['y']
+        else:
+            y = None
 
-            if 'X_names' not in ds or ds['X_names'] is None:
-                X_names = list(range(X.shape[1]))
-            else:
-                X_names = ds['X_names']
+        if 'X_names' not in ds or ds['X_names'] is None or np.ndim(ds['X_names']) == 0:
+            X_names = list(range(X.shape[1]))
+        else:
+            X_names = list(ds['X_names'])
 
     else:
 
