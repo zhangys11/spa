@@ -1,0 +1,22 @@
+FTIR spectra of freeze-dried coffee (Arabica vs Robusta)
+
+56 samples, 286 spectral variables, 2 classes.
+29 Arabica (class 0), 27 Robusta (class 1).
+Spectral range: 810-1910 cm-1 (FTIR with DRIFT sampling).
+
+Task: binary classification - coffee varietal identification.
+
+Related publications:
+
+    Briandet, R., Kemsley, E.K., Wilson, R.H. (1996).
+    Discrimination of Arabica and Robusta in Instant Coffee by
+    Fourier Transform Infrared Spectroscopy and Chemometrics.
+    J. Agric. Food Chem. 44 (1), 170-174.
+    https://doi.org/10.1021/jf950305a
+
+    Downey, G., Briandet, R., Wilson, R.H., Kemsley, E.K. (1997).
+    Near- and Mid-Infrared Spectroscopies in Food Authentication:
+    Coffee Varietal Identification. J. Agric. Food Chem. 45 (11), 4357-4361.
+    https://doi.org/10.1021/jf970337t
+
+Source: Quadram Institute CSR (https://csr.quadram.ac.uk/example-datasets-for-download/)

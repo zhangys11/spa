@@ -1,0 +1,9 @@
+NIR spectra of corn samples for protein content classification
+
+80 samples, 700 spectral variables (1100-2498 nm, 2 nm intervals),
+5 classes (protein content quantiles).
+
+Task: classification (grain quality assessment).
+
+Source: Eigenvector Research data archive
+(https://eigenvector.com/resources/data-sets/)

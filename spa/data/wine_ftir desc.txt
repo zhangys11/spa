@@ -1,0 +1,11 @@
+FTIR spectra of red wines: Cabernet Sauvignon vs Syrah (Shiraz)
+
+111 samples, 235 spectral variables, 2 classes.
+37 independent wine samples, each measured in triplicate.
+57 Cabernet Sauvignon (class 0), 54 Syrah (class 1).
+Spectral range: 899-1803 cm-1 (FTIR-ATR).
+
+Task: binary classification - wine varietal authentication.
+
+Source: Quadram Institute CSR FTIR Spectral Library
+(https://csr.quadram.ac.uk/example-datasets-for-download/)

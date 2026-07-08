@@ -1,0 +1,18 @@
+Mid-infrared (MIR) spectra of fresh fruit purees:
+strawberry (authentic) vs non-strawberry (adulterated/other fruits)
+
+983 samples, 235 spectral variables, 2 classes.
+632 authentic strawberry (class 0), 351 adulterated/other (class 1).
+Spectral range: 899-1803 cm-1 (FTIR-ATR).
+
+Task: binary classification - fruit puree adulteration detection.
+
+Related publication:
+
+    Holland, J.K., Kemsley, E.K., Wilson, R.H. (1998).
+    Use of Fourier transform infrared spectroscopy and partial least
+    squares regression for the detection of adulteration of strawberry
+    purees. J. Sci. Food Agric. 76, 263-269.
+    https://doi.org/10.1002/(SICI)1097-0010(199802)76:2<263::AID-JSFA943>3.0.CO;2-F
+
+Source: Quadram Institute CSR (https://csr.quadram.ac.uk/example-datasets-for-download/)

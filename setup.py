@@ -17,7 +17,7 @@ setup(
     name="spa-ds",
 
     # Version number:
-    version="2.1.0",
+    version="2.2.0",
 
     # Application author details:
     author="Yinsheng Zhang (Ph.D.)",
