@@ -161,32 +161,3 @@ This package is a master library containing various previous packages published 
 </table>
 
 
-
- 刚提的两项设置（我上一条只做了一半）
-恢复默认：Service 方法已加，但还没接 API 端点和前端按钮。
-语言/画幅等限定下拉：未做，仍是自由文本。
-
-B. 产品/平台层——大块完全没做
-Export Presets（抖音/YouTube/B站 多尺寸批量导出）——未做。
-Safety & Review / 内容审核——未做。
-Model Routing 未接线：Settings 里 ScriptModel/ImageModel/VideoModel/VoiceModel 字段能存，但生成时并没真正按它路由到不同模型（provider 仍读 env/MediaOptions）。
-
-C. 引擎模块——首版已跑通，深度未做
-③ Generation Router：算出并记录路线，但没有真正差异化的生成路径（多关键帧/首帧/图生视频只是标签，未落到不同流程）。
-④ Reference Director：只有 prompt 优先级 + 禁止项文本；没有参考图 embedding / IP-Adapter 传图做人脸强一致。
-⑤ Lineart/专业分镜：结构字段有了，没有真正的线稿渲染 / ControlNet 结构锁定。
-⑥ QC Gate：规则检查，没有真实画面漂移检测（需视觉模型）。
-⑦ Repair Path：映射到重生成策略，没有局部重绘/局部重算。
-⑧ Dependency Graph：能看角色→镜头引用，没有"改角色→自动批量重算受影响镜头"的传播。
-⑩ Experiment Run：会记录，没有 A/B 实验编排 / ReRank 训练集导出。
-⑪ Delivery Package：MP4+BGM+SRT+manifest，缺封面帧、工程包(zip)、审阅态、资产清单打包。
-D. 皇冠层——规则引擎已落地，其余未做
-Director RAG（影视教材/摄影/剪辑知识检索）——未做。
-真实 Video Critic 模型——当前是启发式占位打分，非真实模型。
-E. 生成层仍是占位/默认省成本
-视频：默认走 FFmpeg 伪运镜；真 text2video（Wan2.2）已接但默认关。
-图像一致性：只靠 prompt+seed，无真正 img2img/人脸锁定（默认）。
-mflux 本地图像：因磁盘不足未启用；Ollama 本地 LLM 非默认（现用 DeepSeek）。
-Cost Estimator：给的是调用次数，不是真实金额（无单价表）。
-一句话
-11 个引擎模块 + 皇冠规则引擎都有可运行首版；没做的主要是：产品化平台层（鉴权/权限/支付/存储/发布集成/审核）+ 各引擎的"真模型/真渲染"深度 + Director RAG + 真实 Critic 训练。
